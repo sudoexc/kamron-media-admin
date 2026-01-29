@@ -24,6 +24,7 @@ import {
 } from '@/api/entities';
 import { Bot, PaymentMethod, Subscription, User } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
 import axios from 'axios';
 
 const paymentSchema = z.object({
@@ -287,10 +288,22 @@ const PaymentFormPage: React.FC = () => {
       };
 
       if (isEdit) {
-        await paymentsApi.update(id!, payload);
+        const updated = await paymentsApi.update(id!, payload);
+        logRecentAction({
+          entityType: 'payment',
+          entityId: String(updated.id),
+          entityName: `Платёж #${updated.id}`,
+          action: 'edit',
+        });
         toast({ title: 'Успешно', description: 'Платёж обновлён' });
       } else {
-        await paymentsApi.create(payload);
+        const created = await paymentsApi.create(payload);
+        logRecentAction({
+          entityType: 'payment',
+          entityId: String(created.id),
+          entityName: `Платёж #${created.id}`,
+          action: 'create',
+        });
         toast({ title: 'Успешно', description: 'Платёж создан' });
       }
       navigate('/admin/payments');
@@ -458,7 +471,6 @@ const PaymentFormPage: React.FC = () => {
               <Label htmlFor="amount">Сумма</Label>
               <Input
                 id="amount"
-                placeholder="15.00"
                 {...register('amount')}
                 disabled={isLoading}
               />

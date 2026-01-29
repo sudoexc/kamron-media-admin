@@ -11,19 +11,24 @@ import { Loader2, ArrowLeft } from 'lucide-react';
 import { botsApi } from '@/api/entities';
 import { Bot } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
+
+const numberFromInput = (message: string) =>
+  z.preprocess(
+    (val) => {
+      if (val === '' || val === null || typeof val === 'undefined') return undefined;
+      if (typeof val === 'string' && val.trim() === '') return undefined;
+      return Number(val);
+    },
+    z.number({ required_error: message }).int('Только целое число')
+  );
 
 const botSchema = z.object({
   title: z.string().min(1, 'Введите название').max(100),
   username: z.string().min(1, 'Введите username').max(50),
-  notification_group_id: z.preprocess(
-    (val) => Number(val),
-    z.number({ required_error: 'Введите ID группы' }).int('Только целое число')
-  ),
+  notification_group_id: numberFromInput('Введите ID группы'),
   bot_token: z.string().min(1, 'Введите токен бота'),
-  request_port: z.preprocess(
-    (val) => Number(val),
-    z.number({ required_error: 'Введите порт' }).int('Только целое число')
-  ),
+  request_port: numberFromInput('Введите порт'),
 });
 
 type BotFormData = z.infer<typeof botSchema>;
@@ -46,9 +51,7 @@ const BotFormPage: React.FC = () => {
     defaultValues: {
       title: '',
       username: '',
-      notification_group_id: 0,
       bot_token: '',
-      request_port: 0,
     },
   });
 
@@ -62,7 +65,7 @@ const BotFormPage: React.FC = () => {
             setValue('username', bot.username);
             setValue('notification_group_id', bot.notification_group_id);
             setValue('bot_token', bot.bot_token);
-            setValue('request_port', bot.request_port);
+            setValue('request_port', bot.request_port ?? undefined);
           }
         } catch (error) {
           toast({
@@ -83,10 +86,22 @@ const BotFormPage: React.FC = () => {
     setIsLoading(true);
     try {
       if (isEdit) {
-        await botsApi.update(id!, data);
+        const updated = await botsApi.update(id!, data);
+        logRecentAction({
+          entityType: 'bot',
+          entityId: String(updated.id),
+          entityName: updated.title,
+          action: 'edit',
+        });
         toast({ title: 'Успешно', description: 'Бот обновлён' });
       } else {
-        await botsApi.create(data as Omit<Bot, 'id' | 'created_at'>);
+        const created = await botsApi.create(data as Omit<Bot, 'id' | 'created_at'>);
+        logRecentAction({
+          entityType: 'bot',
+          entityId: String(created.id),
+          entityName: created.title,
+          action: 'create',
+        });
         toast({ title: 'Успешно', description: 'Бот создан' });
       }
       navigate('/admin/bots');

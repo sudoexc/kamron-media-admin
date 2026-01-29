@@ -19,6 +19,17 @@ import { Loader2, ArrowLeft } from 'lucide-react';
 import { plansApi, botsApi } from '@/api/entities';
 import { Bot, SubscriptionPlan } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
+
+const numberFromInput = (message: string) =>
+  z.preprocess(
+    (val) => {
+      if (val === '' || val === null || typeof val === 'undefined') return undefined;
+      if (typeof val === 'string' && val.trim() === '') return undefined;
+      return Number(val);
+    },
+    z.number({ required_error: message }).int('Только целое число')
+  );
 
 const planSchema = z.object({
   bot: z.preprocess(
@@ -26,10 +37,7 @@ const planSchema = z.object({
     z.number({ required_error: 'Выберите бота' }).int('Только целое число')
   ),
   name: z.string().min(1, 'Введите название').max(100),
-  duration_days: z.preprocess(
-    (val) => Number(val),
-    z.number({ required_error: 'Введите длительность' }).int('Только целое число')
-  ),
+  duration_days: numberFromInput('Введите длительность'),
   price_usdt: z.string().min(1, 'Введите цену в USDT'),
   price_uzs: z.string().min(1, 'Введите цену в UZS'),
   price_stars: z.string().min(1, 'Введите цену в STARS'),
@@ -59,7 +67,6 @@ const PlanFormPage: React.FC = () => {
     defaultValues: {
       bot: 0,
       name: '',
-      duration_days: 30,
       price_usdt: '',
       price_uzs: '',
       price_stars: '',
@@ -134,10 +141,22 @@ const PlanFormPage: React.FC = () => {
         is_active: data.is_active,
       };
       if (isEdit) {
-        await plansApi.update(id!, payload);
+        const updated = await plansApi.update(id!, payload);
+        logRecentAction({
+          entityType: 'plan',
+          entityId: String(updated.id),
+          entityName: updated.name,
+          action: 'edit',
+        });
         toast({ title: 'Успешно', description: 'План обновлён' });
       } else {
-        await plansApi.create(payload);
+        const created = await plansApi.create(payload);
+        logRecentAction({
+          entityType: 'plan',
+          entityId: String(created.id),
+          entityName: created.name,
+          action: 'create',
+        });
         toast({ title: 'Успешно', description: 'План создан' });
       }
       navigate('/admin/subscription-plans');
@@ -215,7 +234,6 @@ const PlanFormPage: React.FC = () => {
               <Label htmlFor="name">Name</Label>
               <Input
                 id="name"
-                placeholder="7 Дней"
                 {...register('name')}
                 disabled={isLoading}
               />
@@ -229,7 +247,6 @@ const PlanFormPage: React.FC = () => {
               <Input
                 id="duration_days"
                 type="number"
-                placeholder="7"
                 {...register('duration_days')}
                 disabled={isLoading}
               />
@@ -247,7 +264,6 @@ const PlanFormPage: React.FC = () => {
                   id="price_usdt"
                   type="number"
                   step="0.01"
-                  placeholder="4.00"
                   {...register('price_usdt')}
                   disabled={isLoading}
                 />
@@ -261,7 +277,6 @@ const PlanFormPage: React.FC = () => {
                   id="price_uzs"
                   type="number"
                   step="0.01"
-                  placeholder="45000.00"
                   {...register('price_uzs')}
                   disabled={isLoading}
                 />
@@ -275,7 +290,6 @@ const PlanFormPage: React.FC = () => {
                   id="price_stars"
                   type="number"
                   step="0.01"
-                  placeholder="1.00"
                   {...register('price_stars')}
                   disabled={isLoading}
                 />
@@ -289,7 +303,6 @@ const PlanFormPage: React.FC = () => {
                   id="price_rub"
                   type="number"
                   step="0.01"
-                  placeholder="400.00"
                   {...register('price_rub')}
                   disabled={isLoading}
                 />

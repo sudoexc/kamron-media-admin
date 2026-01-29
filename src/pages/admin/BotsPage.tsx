@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/table/DataTable';
 import { DataTableSearch } from '@/components/table/DataTableSearch';
+import { DataTablePagination } from '@/components/table/DataTablePagination';
 import { DataTableActions } from '@/components/table/DataTableActions';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { botsApi } from '@/api/entities';
@@ -12,6 +13,7 @@ import { Bot } from '@/types/entities';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
 
 const BotsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -19,11 +21,13 @@ const BotsPage: React.FC = () => {
   const [data, setData] = useState<Bot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const limit = 10;
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -67,7 +71,14 @@ const BotsPage: React.FC = () => {
     if (!deleteId) return;
     setIsDeleting(true);
     try {
+      const target = data.find((bot) => String(bot.id) === deleteId);
       await botsApi.delete(deleteId);
+      logRecentAction({
+        entityType: 'bot',
+        entityId: deleteId,
+        entityName: target?.title || `Бот #${deleteId}`,
+        action: 'delete',
+      });
       toast({ title: 'Успешно', description: 'Бот удалён' });
       fetchData();
     } catch (error) {
@@ -86,7 +97,19 @@ const BotsPage: React.FC = () => {
     if (selectedIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
+      const targets = selectedIds.map((id) => {
+        const bot = data.find((item) => String(item.id) === id);
+        return { id, name: bot?.title || `Бот #${id}` };
+      });
       await Promise.all(selectedIds.map((id) => botsApi.delete(id)));
+      targets.forEach((target) =>
+        logRecentAction({
+          entityType: 'bot',
+          entityId: target.id,
+          entityName: target.name,
+          action: 'delete',
+        })
+      );
       toast({ title: 'Успешно', description: 'Боты удалены' });
       setSelectedIds([]);
       fetchData();
@@ -111,6 +134,16 @@ const BotsPage: React.FC = () => {
       String(bot.notification_group_id).includes(q)
     );
   });
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(1);
+    }
+  }, [page, totalPages]);
 
   const columns = [
     {
@@ -180,6 +213,7 @@ const BotsPage: React.FC = () => {
               value={search}
               onChange={(value) => {
                 setSearch(value);
+                setPage(1);
               }}
               placeholder="Поиск по названию..."
               showFilterButton={false}
@@ -188,7 +222,7 @@ const BotsPage: React.FC = () => {
 
           <DataTable
             columns={columns}
-            data={filtered}
+            data={paginated}
             isLoading={isLoading}
             onRowClick={(bot) => navigate(`/admin/bots/${bot.id}/edit`)}
             selectable
@@ -197,6 +231,16 @@ const BotsPage: React.FC = () => {
             rowKey={(bot) => String(bot.id)}
             emptyMessage="Боты не найдены"
           />
+
+          {totalPages > 1 && (
+            <DataTablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              limit={limit}
+              onPageChange={setPage}
+            />
+          )}
         </CardContent>
       </Card>
 

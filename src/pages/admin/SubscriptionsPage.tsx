@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/table/DataTable';
 import { DataTableSearch } from '@/components/table/DataTableSearch';
+import { DataTablePagination } from '@/components/table/DataTablePagination';
 import { DataTableActions } from '@/components/table/DataTableActions';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -13,6 +14,7 @@ import { Subscription, Bot, SubscriptionPlan, User, SubscriptionRef } from '@/ty
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
 
 const SubscriptionsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -23,11 +25,13 @@ const SubscriptionsPage: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const limit = 10;
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -87,7 +91,16 @@ const SubscriptionsPage: React.FC = () => {
     if (!deleteId) return;
     setIsDeleting(true);
     try {
+      const target = data.find((sub) => String(sub.id) === deleteId);
       await subscriptionsApi.delete(deleteId);
+      logRecentAction({
+        entityType: 'subscription',
+        entityId: deleteId,
+        entityName: target
+          ? `Подписка #${target.id}`
+          : `Подписка #${deleteId}`,
+        action: 'delete',
+      });
       toast({ title: 'Успешно', description: 'Подписка удалена' });
       fetchData();
     } catch (error) {
@@ -106,7 +119,19 @@ const SubscriptionsPage: React.FC = () => {
     if (selectedIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
+      const targets = selectedIds.map((id) => ({
+        id,
+        name: `Подписка #${id}`,
+      }));
       await Promise.all(selectedIds.map((id) => subscriptionsApi.delete(id)));
+      targets.forEach((target) =>
+        logRecentAction({
+          entityType: 'subscription',
+          entityId: target.id,
+          entityName: target.name,
+          action: 'delete',
+        })
+      );
       toast({ title: 'Успешно', description: 'Подписки удалены' });
       setSelectedIds([]);
       fetchData();
@@ -178,6 +203,16 @@ const SubscriptionsPage: React.FC = () => {
       getRefLabel(sub.plan).toLowerCase().includes(q)
     );
   });
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(1);
+    }
+  }, [page, totalPages]);
 
   const formatDateTime = (value?: string | null) => {
     if (!value) return '—';
@@ -279,6 +314,7 @@ const SubscriptionsPage: React.FC = () => {
               value={search}
               onChange={(value) => {
                 setSearch(value);
+                setPage(1);
               }}
               placeholder="Поиск..."
               showFilterButton={false}
@@ -287,7 +323,7 @@ const SubscriptionsPage: React.FC = () => {
 
           <DataTable
             columns={columns}
-            data={filtered}
+            data={paginated}
             isLoading={isLoading}
             onRowClick={(sub) => navigate(`/admin/subscriptions/${sub.id}/edit`)}
             selectable
@@ -296,6 +332,16 @@ const SubscriptionsPage: React.FC = () => {
             rowKey={(sub) => String(sub.id)}
             emptyMessage="Подписки не найдены"
           />
+
+          {totalPages > 1 && (
+            <DataTablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              limit={limit}
+              onPageChange={setPage}
+            />
+          )}
         </CardContent>
       </Card>
 

@@ -22,6 +22,7 @@ import UserFormPage from "./pages/admin/UserFormPage";
 import MessagesPage from "./pages/admin/MessagesPage";
 import MessageFormPage from "./pages/admin/MessageFormPage";
 import PaymentMethodsPage from "./pages/admin/PaymentMethodsPage";
+import PaymentMethodFormPage from "./pages/admin/PaymentMethodFormPage";
 import SubscriptionsReportPage from "./pages/admin/SubscriptionsReportPage";
 import SubscriptionFormPage from "./pages/admin/SubscriptionFormPage";
 import NotFound from "./pages/NotFound";
@@ -76,8 +77,8 @@ const App = () => (
                 <Route path="messages/:id/edit" element={<MessageFormPage />} />
                 
                 <Route path="payment-methods" element={<PaymentMethodsPage />} />
-                <Route path="payment-methods/create" element={<PaymentMethodsPage />} />
-                <Route path="payment-methods/:id/edit" element={<PaymentMethodsPage />} />
+                <Route path="payment-methods/create" element={<PaymentMethodFormPage />} />
+                <Route path="payment-methods/:id/edit" element={<PaymentMethodFormPage />} />
                 
                 <Route path="analytics/subscriptions-report" element={<SubscriptionsReportPage />} />
               </Route>

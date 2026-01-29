@@ -71,6 +71,32 @@ const normalizePaginatedResponse = <T>(
   };
 };
 
+const cacheStore = new Map<string, { ts: number; data: unknown }>();
+const CACHE_TTL_MS = 30_000;
+
+const getCached = async <T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  ttl: number = CACHE_TTL_MS
+): Promise<T> => {
+  const cached = cacheStore.get(key);
+  const now = Date.now();
+  if (cached && now - cached.ts < ttl) {
+    return cached.data as T;
+  }
+  const data = await fetcher();
+  cacheStore.set(key, { ts: now, data });
+  return data;
+};
+
+const invalidateCache = (prefix: string) => {
+  Array.from(cacheStore.keys()).forEach((key) => {
+    if (key.startsWith(prefix)) {
+      cacheStore.delete(key);
+    }
+  });
+};
+
 // Generic CRUD factory for mock mode
 function createMockCrud<T extends { id: string | number; createdAt?: string; created_at?: string }>(
   entityType: string,
@@ -205,21 +231,46 @@ function createMockCrud<T extends { id: string | number; createdAt?: string; cre
 
 // Entity APIs
 export const botsApi = {
-  getAll: () => apiClient.get<Bot[]>('/bots/').then((r) => r.data),
+  getAll: () => getCached('bots:list', () => apiClient.get<Bot[]>('/bots/').then((r) => r.data)),
   getById: (id: string | number) => apiClient.get<Bot>(`/bots/${id}/`).then((r) => r.data),
-  create: (data: Omit<Bot, 'id' | 'created_at'>) => apiClient.post<Bot>('/bots/', data).then((r) => r.data),
-  update: (id: string | number, data: Partial<Bot>) => apiClient.patch<Bot>(`/bots/${id}/`, data).then((r) => r.data),
-  delete: (id: string | number) => apiClient.delete(`/bots/${id}/`).then(() => undefined),
+  create: (data: Omit<Bot, 'id' | 'created_at'>) =>
+    apiClient.post<Bot>('/bots/', data).then((r) => {
+      invalidateCache('bots:');
+      return r.data;
+    }),
+  update: (id: string | number, data: Partial<Bot>) =>
+    apiClient.patch<Bot>(`/bots/${id}/`, data).then((r) => {
+      invalidateCache('bots:');
+      return r.data;
+    }),
+  delete: (id: string | number) =>
+    apiClient.delete(`/bots/${id}/`).then(() => {
+      invalidateCache('bots:');
+      return undefined;
+    }),
 };
 
 export const plansApi = {
-  getAll: () => apiClient.get<SubscriptionPlan[]>('/plans/').then((r) => r.data),
+  getAll: () =>
+    getCached('plans:list', () =>
+      apiClient.get<SubscriptionPlan[]>('/plans/').then((r) => r.data)
+    ),
   getById: (id: string | number) => apiClient.get<SubscriptionPlan>(`/plans/${id}/`).then((r) => r.data),
   create: (data: Omit<SubscriptionPlan, 'id' | 'created_at'>) =>
-    apiClient.post<SubscriptionPlan>('/plans/', data).then((r) => r.data),
+    apiClient.post<SubscriptionPlan>('/plans/', data).then((r) => {
+      invalidateCache('plans:');
+      return r.data;
+    }),
   update: (id: string | number, data: Partial<SubscriptionPlan>) =>
-    apiClient.patch<SubscriptionPlan>(`/plans/${id}/`, data).then((r) => r.data),
-  delete: (id: string | number) => apiClient.delete(`/plans/${id}/`).then(() => undefined),
+    apiClient.patch<SubscriptionPlan>(`/plans/${id}/`, data).then((r) => {
+      invalidateCache('plans:');
+      return r.data;
+    }),
+  delete: (id: string | number) =>
+    apiClient.delete(`/plans/${id}/`).then(() => {
+      invalidateCache('plans:');
+      return undefined;
+    }),
 };
 
 export const paymentsApi = {
@@ -244,26 +295,48 @@ export const paymentsApi = {
 };
 
 export const subscriptionsApi = {
-  getAll: () => apiClient.get<Subscription[]>('/subscriptions/').then((r) => r.data),
+  getAll: () =>
+    getCached('subscriptions:list', () =>
+      apiClient.get<Subscription[]>('/subscriptions/').then((r) => r.data)
+    ),
   getById: (id: string | number) =>
     apiClient.get<Subscription>(`/subscriptions/${id}/`).then((r) => r.data),
   create: (data: Omit<Subscription, 'id' | 'created_at'>) =>
-    apiClient.post<Subscription>('/subscriptions/', data).then((r) => r.data),
+    apiClient.post<Subscription>('/subscriptions/', data).then((r) => {
+      invalidateCache('subscriptions:');
+      return r.data;
+    }),
   update: (id: string | number, data: Partial<Subscription>) =>
-    apiClient.patch<Subscription>(`/subscriptions/${id}/`, data).then((r) => r.data),
+    apiClient.patch<Subscription>(`/subscriptions/${id}/`, data).then((r) => {
+      invalidateCache('subscriptions:');
+      return r.data;
+    }),
   delete: (id: string | number) =>
-    apiClient.delete(`/subscriptions/${id}/`).then(() => undefined),
+    apiClient.delete(`/subscriptions/${id}/`).then(() => {
+      invalidateCache('subscriptions:');
+      return undefined;
+    }),
 };
 
 export const usersApi = {
-  getAll: () => apiClient.get<User[]>('/users/').then((r) => r.data),
+  getAll: () => getCached('users:list', () => apiClient.get<User[]>('/users/').then((r) => r.data)),
   getById: (telegramId: string | number) =>
     apiClient.get<User>(`/users/${telegramId}/`).then((r) => r.data),
-  create: (data: User) => apiClient.post<User>('/users/', data).then((r) => r.data),
+  create: (data: User) =>
+    apiClient.post<User>('/users/', data).then((r) => {
+      invalidateCache('users:');
+      return r.data;
+    }),
   update: (telegramId: string | number, data: Partial<User>) =>
-    apiClient.patch<User>(`/users/${telegramId}/`, data).then((r) => r.data),
+    apiClient.patch<User>(`/users/${telegramId}/`, data).then((r) => {
+      invalidateCache('users:');
+      return r.data;
+    }),
   delete: (telegramId: string | number) =>
-    apiClient.delete(`/users/${telegramId}/`).then(() => undefined),
+    apiClient.delete(`/users/${telegramId}/`).then(() => {
+      invalidateCache('users:');
+      return undefined;
+    }),
 };
 
 export const messagesApi = {

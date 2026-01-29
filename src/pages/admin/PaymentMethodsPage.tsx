@@ -7,13 +7,14 @@ import { DataTable } from '@/components/table/DataTable';
 import { DataTableSearch } from '@/components/table/DataTableSearch';
 import { DataTablePagination } from '@/components/table/DataTablePagination';
 import { DataTableActions } from '@/components/table/DataTableActions';
-import { StatusBadge } from '@/components/ui/status-badge';
+import { Switch } from '@/components/ui/switch';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { paymentMethodsApi } from '@/api/entities';
 import { PaymentMethod } from '@/types/entities';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
 
 const PaymentMethodsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,12 +22,12 @@ const PaymentMethodsPage: React.FC = () => {
   type NormalizedMethod = PaymentMethod & {
     id: string | number;
     label: string;
-    codeLabel?: string;
     isActive?: boolean;
     createdAt?: string;
   };
   const [data, setData] = useState<NormalizedMethod[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -52,24 +53,16 @@ const PaymentMethodsPage: React.FC = () => {
             };
           }
 
-          const label =
-            method.title ||
-            method.name ||
-            method.code ||
-            method.provider ||
-            `Метод ${index + 1}`;
+          const label = method.title || method.name || `Метод ${index + 1}`;
           const id =
             method.id ||
-            method.code ||
             method.name ||
             method.title ||
-            method.provider ||
             String(index + 1);
           return {
             ...method,
             id,
             label,
-            codeLabel: method.code || method.provider || '',
             isActive: method.is_active ?? method.isActive,
             createdAt: method.created_at ?? method.createdAt,
           };
@@ -114,7 +107,14 @@ const PaymentMethodsPage: React.FC = () => {
     if (!deleteId) return;
     setIsDeleting(true);
     try {
+      const target = data.find((method) => String(method.id) === deleteId);
       await paymentMethodsApi.delete(deleteId);
+      logRecentAction({
+        entityType: 'payment_method',
+        entityId: deleteId,
+        entityName: target?.label || `Метод #${deleteId}`,
+        action: 'delete',
+      });
       toast({ title: 'Успешно', description: 'Способ оплаты удалён' });
       fetchData();
     } catch (error) {
@@ -133,7 +133,19 @@ const PaymentMethodsPage: React.FC = () => {
     if (selectedIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
+      const targets = selectedIds.map((id) => {
+        const method = data.find((item) => String(item.id) === id);
+        return { id, name: method?.label || `Метод #${id}` };
+      });
       await Promise.all(selectedIds.map((id) => paymentMethodsApi.delete(id)));
+      targets.forEach((target) =>
+        logRecentAction({
+          entityType: 'payment_method',
+          entityId: target.id,
+          entityName: target.name,
+          action: 'delete',
+        })
+      );
       toast({ title: 'Успешно', description: 'Способы оплаты удалены' });
       setSelectedIds([]);
       fetchData();
@@ -149,6 +161,46 @@ const PaymentMethodsPage: React.FC = () => {
     }
   };
 
+  const setUpdating = (id: string, active: boolean) => {
+    setUpdatingIds((prev) => {
+      const next = new Set(prev);
+      if (active) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleActive = async (method: NormalizedMethod, nextValue: boolean) => {
+    if (method.isActive === undefined) return;
+    const id = String(method.id);
+    setUpdating(id, true);
+    try {
+      await paymentMethodsApi.update(method.id, { is_active: nextValue });
+      setData((prev) =>
+        prev.map((item) =>
+          String(item.id) === id ? { ...item, isActive: nextValue } : item
+        )
+      );
+      logRecentAction({
+        entityType: 'payment_method',
+        entityId: id,
+        entityName: method.label || `Метод #${id}`,
+        action: 'edit',
+      });
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось обновить статус способа оплаты',
+        variant: 'destructive',
+      });
+    } finally {
+      setUpdating(id, false);
+    }
+  };
+
   const columns = [
     {
       key: 'title',
@@ -158,23 +210,26 @@ const PaymentMethodsPage: React.FC = () => {
       ),
     },
     {
-      key: 'code',
-      header: 'Код',
-      cell: (method: NormalizedMethod) =>
-        method.codeLabel ? method.codeLabel.toUpperCase() : '—',
-    },
-    {
       key: 'isActive',
-      header: 'Статус',
+      header: 'Активность',
       cell: (method: NormalizedMethod) => {
         const active = method.isActive;
+        if (active === undefined) return '—';
+        const id = String(method.id);
         return (
-          <StatusBadge
-            status={
-              active === undefined ? 'default' : active ? 'active' : 'inactive'
-            }
-            label={active === undefined ? '—' : active ? 'Активен' : 'Неактивен'}
-          />
+          <div
+            className="flex items-center gap-2"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Switch
+              checked={active}
+              onCheckedChange={(checked) => handleToggleActive(method, checked)}
+              disabled={updatingIds.has(id)}
+            />
+            <span className="text-sm text-muted-foreground">
+              {active ? 'Вкл' : 'Выкл'}
+            </span>
+          </div>
         );
       },
     },

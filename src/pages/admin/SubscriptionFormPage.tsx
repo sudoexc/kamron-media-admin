@@ -17,9 +17,11 @@ import {
 } from '@/components/ui/select';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { subscriptionsApi, usersApi, botsApi, plansApi } from '@/api/entities';
+import { apiClient } from '@/api/client';
 import { Subscription, User, Bot, SubscriptionPlan, SubscriptionRef } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
 import axios from 'axios';
+import { logRecentAction } from '@/lib/recent-actions';
 
 const subscriptionSchema = z.object({
   user: z.preprocess(
@@ -90,6 +92,15 @@ const SubscriptionFormPage: React.FC = () => {
     if (typeof value.telegram_id === 'number') return value.telegram_id;
     if (typeof value.id === 'number') return value.id;
     return null;
+  };
+
+  const getUserLanguage = (userId: number) => {
+    const user = users.find(
+      (item) =>
+        Number(item.telegram_id) === userId ||
+        (typeof item.id === 'number' && Number(item.id) === userId)
+    );
+    return user?.language || 'ru';
   };
 
   const userOptions = useMemo(
@@ -224,10 +235,50 @@ const SubscriptionFormPage: React.FC = () => {
       };
 
       if (isEdit) {
-        await subscriptionsApi.update(id!, payload);
+        const updated = await subscriptionsApi.update(id!, payload);
+        logRecentAction({
+          entityType: 'subscription',
+          entityId: String(updated.id),
+          entityName: `Подписка #${updated.id}`,
+          action: 'edit',
+        });
         toast({ title: 'Успешно', description: 'Подписка обновлена' });
       } else {
-        await subscriptionsApi.create(payload);
+        const created = await subscriptionsApi.create(payload);
+        logRecentAction({
+          entityType: 'subscription',
+          entityId: String(created.id),
+          entityName: `Подписка #${created.id}`,
+          action: 'create',
+        });
+        try {
+          await apiClient.post('/send_purchase_notification/', {
+            user_id: data.user,
+            bot_id: data.bot,
+            plan_id: data.plan,
+            language: getUserLanguage(data.user),
+          });
+        } catch (error) {
+          let details = '';
+          if (axios.isAxiosError(error)) {
+            const data = error.response?.data as
+              | Record<string, unknown>
+              | string
+              | undefined;
+            if (typeof data === 'string') {
+              details = data;
+            } else if (data && typeof data === 'object') {
+              details = Object.entries(data)
+                .map(([key, value]) => `${key}: ${String(value)}`)
+                .join(' | ');
+            }
+          }
+          toast({
+            title: 'Уведомление не отправлено',
+            description: details || 'Не удалось отправить уведомление о покупке',
+            variant: 'destructive',
+          });
+        }
         toast({ title: 'Успешно', description: 'Подписка создана' });
       }
       navigate('/admin/subscriptions');

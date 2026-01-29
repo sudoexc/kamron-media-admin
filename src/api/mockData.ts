@@ -349,6 +349,7 @@ export const getMockDashboardStats = (): DashboardStats => {
     activeSubscriptions,
     todayPayments,
     totalRevenue,
+    totalPayments: payments.length,
     userGrowth: 12.5,
     subscriptionGrowth: 8.3,
     paymentGrowth: -2.1,

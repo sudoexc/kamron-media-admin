@@ -15,6 +15,7 @@ import {
 import { paymentsApi } from '@/api/entities';
 import { Payment } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
+import { apiClient } from '@/api/client';
 
 const methodLabels: Record<string, string> = {
   payme: 'PayMe',
@@ -155,38 +156,42 @@ const SubscriptionsReportPage: React.FC = () => {
     new Intl.NumberFormat('ru-RU').format(value);
 
   const handleExport = () => {
-    const lines: string[] = [];
-    lines.push('Отчёт по подпискам');
-    if (appliedRange.from || appliedRange.to) {
-      lines.push(`Период: ${appliedRange.from || '—'} — ${appliedRange.to || '—'}`);
-    }
-    lines.push('');
-    lines.push('Общая статистика');
-    lines.push(`Всего платежей;${totalCount}`);
-    lines.push(`Общая сумма;${totalAmount}`);
-    lines.push('');
-    lines.push('По методам оплаты');
-    lines.push('Метод;Количество;Сумма');
-    methodStats.forEach((row) => {
-      lines.push(`${row.name};${row.count};${row.sum}`);
-    });
-    lines.push('');
-    lines.push('По ботам');
-    lines.push('Бот;Количество;Сумма');
-    botStats.forEach((row) => {
-      lines.push(`${row.name};${row.count};${row.sum}`);
-    });
+    const downloadReport = async () => {
+      try {
+        const params: Record<string, string> = {};
+        if (appliedRange.from) params.from = appliedRange.from;
+        if (appliedRange.to) params.to = appliedRange.to;
+        const response = await apiClient.get('/reports/payments/', {
+          params,
+          responseType: 'blob',
+        });
+        const contentDisposition = response.headers?.['content-disposition'] as
+          | string
+          | undefined;
+        const filenameMatch = contentDisposition?.match(/filename="?([^"]+)"?/);
+        const filename =
+          filenameMatch?.[1] ||
+          `payments_report_${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+        const blob = new Blob([response.data], {
+          type: response.headers?.['content-type'] || 'application/octet-stream',
+        });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(link.href);
 
-    const csvContent = '\ufeff' + lines.join('\n');
-    const blob = new Blob([csvContent], {
-      type: 'application/vnd.ms-excel;charset=utf-8;',
-    });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `subscriptions_report_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    link.click();
+        toast({ title: 'Экспорт', description: 'Файл сохранён' });
+      } catch (error) {
+        toast({
+          title: 'Ошибка',
+          description: 'Не удалось скачать отчёт',
+          variant: 'destructive',
+        });
+      }
+    };
 
-    toast({ title: 'Экспорт', description: 'Файл сохранён' });
+    downloadReport();
   };
 
   return (

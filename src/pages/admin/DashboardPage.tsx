@@ -33,14 +33,6 @@ const DashboardPage: React.FC = () => {
     fetchData();
   }, []);
 
-  const formatCurrency = (value: number): string => {
-    return new Intl.NumberFormat('ru-RU', {
-      style: 'currency',
-      currency: 'RUB',
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
   return (
     <div className="space-y-6">
       <div>
@@ -69,8 +61,8 @@ const DashboardPage: React.FC = () => {
           change={stats?.paymentGrowth}
         />
         <StatsCard
-          title="Общий доход"
-          value={isLoading ? '...' : formatCurrency(stats?.totalRevenue || 0)}
+          title="Всего платежей"
+          value={isLoading ? '...' : stats?.totalPayments ?? 0}
           icon={TrendingUp}
           change={stats?.revenueGrowth}
         />

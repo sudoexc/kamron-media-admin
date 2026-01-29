@@ -11,6 +11,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { messagesApi } from '@/api/entities';
 import { Message } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
 
 const MessagesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -66,7 +67,14 @@ const MessagesPage: React.FC = () => {
     if (!deleteId) return;
     setIsDeleting(true);
     try {
+      const target = data.find((msg) => String(msg.id) === deleteId);
       await messagesApi.delete(deleteId);
+      logRecentAction({
+        entityType: 'message',
+        entityId: deleteId,
+        entityName: target?.identifier || `Сообщение #${deleteId}`,
+        action: 'delete',
+      });
       toast({ title: 'Успешно', description: 'Сообщение удалено' });
       fetchData();
     } catch (error) {
@@ -85,7 +93,19 @@ const MessagesPage: React.FC = () => {
     if (selectedIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
+      const targets = selectedIds.map((id) => {
+        const msg = data.find((item) => String(item.id) === id);
+        return { id, name: msg?.identifier || `Сообщение #${id}` };
+      });
       await Promise.all(selectedIds.map((id) => messagesApi.delete(id)));
+      targets.forEach((target) =>
+        logRecentAction({
+          entityType: 'message',
+          entityId: target.id,
+          entityName: target.name,
+          action: 'delete',
+        })
+      );
       toast({ title: 'Успешно', description: 'Сообщения удалены' });
       setSelectedIds([]);
       fetchData();

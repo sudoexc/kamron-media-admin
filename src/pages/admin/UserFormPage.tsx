@@ -19,6 +19,7 @@ import { Loader2, ArrowLeft } from 'lucide-react';
 import { usersApi } from '@/api/entities';
 import { User } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
 
 const userSchema = z.object({
   telegram_id: z.preprocess(
@@ -96,10 +97,22 @@ const UserFormPage: React.FC = () => {
         is_active: data.is_active,
       };
       if (isEdit) {
-        await usersApi.update(id!, payload);
+        const updated = await usersApi.update(id!, payload);
+        logRecentAction({
+          entityType: 'user',
+          entityId: String(updated.telegram_id),
+          entityName: `Пользователь ${updated.telegram_id}`,
+          action: 'edit',
+        });
         toast({ title: 'Успешно', description: 'Пользователь обновлён' });
       } else {
-        await usersApi.create(payload);
+        const created = await usersApi.create(payload);
+        logRecentAction({
+          entityType: 'user',
+          entityId: String(created.telegram_id),
+          entityName: `Пользователь ${created.telegram_id}`,
+          action: 'create',
+        });
         toast({ title: 'Успешно', description: 'Пользователь создан' });
       }
       navigate('/admin/users');

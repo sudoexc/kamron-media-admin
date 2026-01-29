@@ -79,6 +79,7 @@ export interface PaymentMethod {
   name?: string;
   code?: string;
   provider?: string;
+  callback_data?: string;
   is_active?: boolean;
   isActive?: boolean;
   created_at?: string;
@@ -108,6 +109,7 @@ export interface DashboardStats {
   activeSubscriptions: number;
   todayPayments: number;
   totalRevenue: number;
+  totalPayments?: number;
   userGrowth: number;
   subscriptionGrowth: number;
   paymentGrowth: number;

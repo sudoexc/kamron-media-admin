@@ -14,6 +14,7 @@ import { Payment } from '@/types/entities';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
 
 const statusLabels: Record<string, string> = {
   pending: 'В обработке',
@@ -114,7 +115,14 @@ const PaymentsPage: React.FC = () => {
     if (!deleteId) return;
     setIsDeleting(true);
     try {
+      const target = data.find((payment) => String(payment.id) === deleteId);
       await paymentsApi.delete(deleteId);
+      logRecentAction({
+        entityType: 'payment',
+        entityId: deleteId,
+        entityName: target ? `Платёж #${target.id}` : `Платёж #${deleteId}`,
+        action: 'delete',
+      });
       toast({ title: 'Успешно', description: 'Платёж удалён' });
       fetchData();
     } catch (error) {
@@ -133,7 +141,19 @@ const PaymentsPage: React.FC = () => {
     if (selectedIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
+      const targets = selectedIds.map((id) => ({
+        id,
+        name: `Платёж #${id}`,
+      }));
       await Promise.all(selectedIds.map((id) => paymentsApi.delete(id)));
+      targets.forEach((target) =>
+        logRecentAction({
+          entityType: 'payment',
+          entityId: target.id,
+          entityName: target.name,
+          action: 'delete',
+        })
+      );
       toast({ title: 'Успешно', description: 'Платежи удалены' });
       setSelectedIds([]);
       fetchData();

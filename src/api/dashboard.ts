@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import { DashboardStats, RecentAction, Payment, Subscription, User } from '@/types/entities';
+import { getMockRecentActions } from './mockData';
 
 const normalizeListResponse = <T>(payload: unknown): { data: T[]; total: number } => {
   if (Array.isArray(payload)) {
@@ -69,6 +70,7 @@ export const dashboardApi = {
         activeSubscriptions,
         todayPayments,
         totalRevenue,
+        totalPayments: payments.total,
         userGrowth: 0,
         subscriptionGrowth: 0,
         paymentGrowth: 0,
@@ -84,7 +86,10 @@ export const dashboardApi = {
       });
       return response.data;
     } catch {
-      return [];
+      const fallback = getMockRecentActions();
+      return fallback
+        .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))
+        .slice(0, limit);
     }
   },
 

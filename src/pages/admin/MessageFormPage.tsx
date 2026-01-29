@@ -14,6 +14,7 @@ import { apiClient } from '@/api/client';
 import { Message } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
 import axios from 'axios';
+import { logRecentAction } from '@/lib/recent-actions';
 import {
   Dialog,
   DialogContent,
@@ -103,10 +104,22 @@ const MessageFormPage: React.FC = () => {
       };
 
       if (isEdit) {
-        await messagesApi.update(id!, payload);
+        const updated = await messagesApi.update(id!, payload);
+        logRecentAction({
+          entityType: 'message',
+          entityId: String(updated.id),
+          entityName: updated.identifier,
+          action: 'edit',
+        });
         toast({ title: 'Успешно', description: 'Сообщение обновлено' });
       } else {
-        await messagesApi.create(payload);
+        const created = await messagesApi.create(payload);
+        logRecentAction({
+          entityType: 'message',
+          entityId: String(created.id),
+          entityName: created.identifier,
+          action: 'create',
+        });
         toast({ title: 'Успешно', description: 'Сообщение создано' });
       }
       navigate('/admin/messages');
@@ -239,7 +252,6 @@ const MessageFormPage: React.FC = () => {
               <Label htmlFor="identifier">Identifier:</Label>
               <Input
                 id="identifier"
-                placeholder="subscription_purchased"
                 {...register('identifier')}
                 disabled={isLoading}
               />

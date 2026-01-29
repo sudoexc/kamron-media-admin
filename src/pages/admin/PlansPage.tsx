@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/table/DataTable';
 import { DataTableSearch } from '@/components/table/DataTableSearch';
+import { DataTablePagination } from '@/components/table/DataTablePagination';
 import { DataTableActions } from '@/components/table/DataTableActions';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -13,6 +14,7 @@ import { SubscriptionPlan, Bot } from '@/types/entities';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { logRecentAction } from '@/lib/recent-actions';
 
 const PlansPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,11 +23,13 @@ const PlansPage: React.FC = () => {
   const [bots, setBots] = useState<Bot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const limit = 10;
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
@@ -72,7 +76,14 @@ const PlansPage: React.FC = () => {
     if (!deleteId) return;
     setIsDeleting(true);
     try {
+      const target = data.find((plan) => String(plan.id) === deleteId);
       await plansApi.delete(deleteId);
+      logRecentAction({
+        entityType: 'plan',
+        entityId: deleteId,
+        entityName: target?.name || `План #${deleteId}`,
+        action: 'delete',
+      });
       toast({ title: 'Успешно', description: 'Тариф удалён' });
       fetchData();
     } catch (error) {
@@ -91,7 +102,19 @@ const PlansPage: React.FC = () => {
     if (selectedIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
+      const targets = selectedIds.map((id) => {
+        const plan = data.find((item) => String(item.id) === id);
+        return { id, name: plan?.name || `План #${id}` };
+      });
       await Promise.all(selectedIds.map((id) => plansApi.delete(id)));
+      targets.forEach((target) =>
+        logRecentAction({
+          entityType: 'plan',
+          entityId: target.id,
+          entityName: target.name,
+          action: 'delete',
+        })
+      );
       toast({ title: 'Успешно', description: 'Планы удалены' });
       setSelectedIds([]);
       fetchData();
@@ -136,6 +159,16 @@ const PlansPage: React.FC = () => {
       String(plan.duration_days).includes(q)
     );
   });
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const paginated = filtered.slice((page - 1) * limit, page * limit);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(1);
+    }
+  }, [page, totalPages]);
 
   const columns = [
     {
@@ -224,6 +257,7 @@ const PlansPage: React.FC = () => {
               value={search}
               onChange={(value) => {
                 setSearch(value);
+                setPage(1);
               }}
               placeholder="Поиск по названию или ID бота..."
               showFilterButton={false}
@@ -232,7 +266,7 @@ const PlansPage: React.FC = () => {
 
           <DataTable
             columns={columns}
-            data={filtered}
+            data={paginated}
             isLoading={isLoading}
             onRowClick={(plan) => navigate(`/admin/subscription-plans/${plan.id}/edit`)}
             selectable
@@ -241,6 +275,16 @@ const PlansPage: React.FC = () => {
             rowKey={(plan) => String(plan.id)}
             emptyMessage="Планы не найдены"
           />
+
+          {totalPages > 1 && (
+            <DataTablePagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              limit={limit}
+              onPageChange={setPage}
+            />
+          )}
         </CardContent>
       </Card>
 
