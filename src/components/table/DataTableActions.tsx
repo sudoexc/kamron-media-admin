@@ -19,28 +19,41 @@ export const DataTableActions: React.FC<DataTableActionsProps> = ({
   onDelete,
   onView,
 }) => {
+  const stop = (event: React.MouseEvent) => {
+    event.stopPropagation();
+  };
+
+  const handleMenuClick =
+    (handler?: () => void) => (event: React.MouseEvent<HTMLDivElement>) => {
+      event.stopPropagation();
+      handler?.();
+    };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={stop}>
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="bg-popover">
         {onView && (
-          <DropdownMenuItem onClick={onView}>
+          <DropdownMenuItem onClick={handleMenuClick(onView)}>
             <Eye className="mr-2 h-4 w-4" />
             Просмотр
           </DropdownMenuItem>
         )}
         {onEdit && (
-          <DropdownMenuItem onClick={onEdit}>
+          <DropdownMenuItem onClick={handleMenuClick(onEdit)}>
             <Pencil className="mr-2 h-4 w-4" />
             Редактировать
           </DropdownMenuItem>
         )}
         {onDelete && (
-          <DropdownMenuItem onClick={onDelete} className="text-destructive">
+          <DropdownMenuItem
+            onClick={handleMenuClick(onDelete)}
+            className="text-destructive"
+          >
             <Trash2 className="mr-2 h-4 w-4" />
             Удалить
           </DropdownMenuItem>

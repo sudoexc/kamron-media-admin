@@ -11,17 +11,15 @@ interface RecentPaymentsWidgetProps {
 }
 
 const statusColors: Record<string, string> = {
-  completed: 'bg-success/10 text-success border-success/20',
+  success: 'bg-success/10 text-success border-success/20',
   pending: 'bg-warning/10 text-warning border-warning/20',
   failed: 'bg-destructive/10 text-destructive border-destructive/20',
-  refunded: 'bg-muted text-muted-foreground border-border',
 };
 
 const statusLabels: Record<string, string> = {
-  completed: 'Выполнен',
+  success: 'Успешно',
   pending: 'В обработке',
   failed: 'Ошибка',
-  refunded: 'Возврат',
 };
 
 export const RecentPaymentsWidget: React.FC<RecentPaymentsWidgetProps> = ({
@@ -63,29 +61,54 @@ export const RecentPaymentsWidget: React.FC<RecentPaymentsWidgetProps> = ({
               Нет платежей
             </p>
           ) : (
-            payments.map((payment) => (
+            payments.map((payment) => {
+              const createdAt = payment.created_at
+                ? new Date(payment.created_at)
+                : null;
+              const rawAmount = payment.amount ?? '';
+              const amount = Number(String(rawAmount).replace(',', '.'));
+              const formattedAmount = Number.isFinite(amount)
+                ? new Intl.NumberFormat('ru-RU', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2,
+                  }).format(amount)
+                : String(rawAmount);
+              const userLabel =
+                typeof payment.user === 'number'
+                  ? `Пользователь #${payment.user}`
+                  : payment.user?.telegram_id
+                    ? `Пользователь #${payment.user.telegram_id}`
+                    : payment.user?.id
+                      ? `Пользователь #${payment.user.id}`
+                      : 'Пользователь';
+              const statusKey = payment.status?.toLowerCase?.() ?? 'default';
+              return (
               <div
                 key={payment.id}
                 className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-fade-in"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">
-                    {payment.userName || `Пользователь #${payment.userId}`}
+                    {userLabel}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {format(new Date(payment.createdAt), 'dd MMM, HH:mm', {
-                      locale: ru,
-                    })}
+                    {createdAt
+                      ? format(createdAt, 'dd MMM, HH:mm', { locale: ru })
+                      : '—'}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-semibold">{payment.amount} ₽</span>
-                  <Badge variant="outline" className={statusColors[payment.status]}>
-                    {statusLabels[payment.status]}
+                  <span className="font-semibold">{formattedAmount}</span>
+                  <Badge
+                    variant="outline"
+                    className={statusColors[statusKey] || 'bg-muted text-muted-foreground border-border'}
+                  >
+                    {statusLabels[statusKey] || payment.status}
                   </Badge>
                 </div>
               </div>
-            ))
+            );
+            })
           )}
         </div>
       </CardContent>

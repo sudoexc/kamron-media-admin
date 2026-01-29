@@ -21,12 +21,28 @@ const BotsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const bots = await botsApi.getAll();
-      setData(bots);
+      const sorted = [...bots].sort((a, b) => {
+        const aTime = a.created_at ? Date.parse(a.created_at) : NaN;
+        const bTime = b.created_at ? Date.parse(b.created_at) : NaN;
+        if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) {
+          return bTime - aTime;
+        }
+        const aId = Number(a.id);
+        const bId = Number(b.id);
+        if (!Number.isNaN(aId) && !Number.isNaN(bId) && aId !== bId) {
+          return bId - aId;
+        }
+        return String(b.id).localeCompare(String(a.id));
+      });
+      setData(sorted);
     } catch (error) {
       console.error('Failed to fetch bots:', error);
       toast({
@@ -42,6 +58,10 @@ const BotsPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [data]);
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -59,6 +79,26 @@ const BotsPage: React.FC = () => {
     } finally {
       setIsDeleting(false);
       setDeleteId(null);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      await Promise.all(selectedIds.map((id) => botsApi.delete(id)));
+      toast({ title: 'Успешно', description: 'Боты удалены' });
+      setSelectedIds([]);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось удалить выбранные боты',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkDeleting(false);
+      setBulkOpen(false);
     }
   };
 
@@ -120,10 +160,17 @@ const BotsPage: React.FC = () => {
           <h1 className="text-2xl font-bold">Боты</h1>
           <p className="text-muted-foreground">Управление ботами системы</p>
         </div>
-        <Button onClick={() => navigate('/admin/bots/create')}>
-          <Plus className="mr-2 h-4 w-4" />
-          Добавить бота
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectedIds.length > 0 && (
+            <Button variant="destructive" onClick={() => setBulkOpen(true)}>
+              Удалить выбранные ({selectedIds.length})
+            </Button>
+          )}
+          <Button onClick={() => navigate('/admin/bots/create')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Добавить бота
+          </Button>
+        </div>
       </div>
 
       <Card className="glass">
@@ -143,6 +190,10 @@ const BotsPage: React.FC = () => {
             columns={columns}
             data={filtered}
             isLoading={isLoading}
+            onRowClick={(bot) => navigate(`/admin/bots/${bot.id}/edit`)}
+            selectable
+            selectedKeys={selectedIds}
+            onSelectedKeysChange={setSelectedIds}
             rowKey={(bot) => String(bot.id)}
             emptyMessage="Боты не найдены"
           />
@@ -157,6 +208,17 @@ const BotsPage: React.FC = () => {
         confirmLabel="Удалить"
         onConfirm={handleDelete}
         isLoading={isDeleting}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        title={`Удалить ${selectedIds.length} ботов?`}
+        description="Это действие нельзя отменить. Боты будут удалены безвозвратно."
+        confirmLabel="Удалить"
+        onConfirm={handleBulkDelete}
+        isLoading={isBulkDeleting}
         variant="destructive"
       />
     </div>

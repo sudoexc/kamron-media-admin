@@ -252,3 +252,8 @@
 .focus-ring {
   @apply focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background;
 }
+
+/* Date input calendar icon in dark theme */
+.dark input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+}

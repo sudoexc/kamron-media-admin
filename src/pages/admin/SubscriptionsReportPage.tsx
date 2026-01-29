@@ -16,6 +16,40 @@ import { paymentsApi } from '@/api/entities';
 import { Payment } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
 
+const methodLabels: Record<string, string> = {
+  payme: 'PayMe',
+  click: 'Click',
+  crypto: 'CryptoBot',
+  stars: 'Telegram Stars',
+  russian_card: 'Russian Card',
+  stub: 'Stub',
+};
+
+const normalizeMethodKey = (value: string) => {
+  const raw = value.toLowerCase();
+  const cleaned = raw
+    .replace(/[^a-z0-9_\s]+/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^_+|_+$/g, '')
+    .trim();
+  const key = cleaned.replace(/\s+/g, '_');
+  const map: Record<string, string> = {
+    payme: 'payme',
+    click: 'click',
+    crypto: 'crypto',
+    cryptobot: 'crypto',
+    stars: 'stars',
+    telegramstars: 'stars',
+    telegram_stars: 'stars',
+    'telegram stars': 'stars',
+    russian_card: 'russian_card',
+    russiancard: 'russian_card',
+    'russian card': 'russian_card',
+    stub: 'stub',
+  };
+  return map[key] ?? key;
+};
+
 const SubscriptionsReportPage: React.FC = () => {
   const { toast } = useToast();
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -30,7 +64,7 @@ const SubscriptionsReportPage: React.FC = () => {
       const response = await paymentsApi.getAll({
         page: 1,
         limit: 1000,
-        sortBy: 'createdAt',
+        sortBy: 'created_at',
         sortOrder: 'desc',
       });
       setPayments(response.data);
@@ -64,9 +98,9 @@ const SubscriptionsReportPage: React.FC = () => {
     }
 
     return payments
-      .filter((p) => p.status === 'completed')
+      .filter((p) => (p.status?.toLowerCase?.() ?? '') === 'success')
       .filter((p) => {
-        const created = new Date(p.createdAt);
+        const created = new Date(p.created_at ?? '');
         if (from && created < from) return false;
         if (to && created > to) return false;
         return true;
@@ -74,21 +108,34 @@ const SubscriptionsReportPage: React.FC = () => {
   }, [payments, appliedRange]);
 
   const totalCount = filteredPayments.length;
-  const totalAmount = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+  const totalAmount = filteredPayments.reduce((sum, p) => {
+    const amount = Number((p.amount || '').replace(',', '.'));
+    return sum + (Number.isFinite(amount) ? amount : 0);
+  }, 0);
 
   const aggregate = useCallback(
-    (key: 'method' | 'botName') => {
+    (key: 'method' | 'bot') => {
       const result: { name: string; count: number; sum: number }[] = [];
       const map = new Map<string, { count: number; sum: number }>();
 
       filteredPayments.forEach((payment) => {
-        const rawKey =
-          key === 'method'
-            ? payment.method || 'Не указан'
-            : payment.botName || 'Без бота';
+        const rawKey = (() => {
+          if (key === 'method') {
+            const raw = payment.method ?? '';
+            const methodKey = normalizeMethodKey(String(raw));
+            return methodLabels[methodKey] || raw || 'Не указан';
+          }
+          const bot = payment.bot;
+          if (typeof bot === 'number') return `#${bot}`;
+          if (bot && typeof bot === 'object') {
+            return bot.title || bot.username || `#${bot.id ?? '—'}`;
+          }
+          return 'Без бота';
+        })();
+        const amount = Number((payment.amount || '').replace(',', '.'));
         const current = map.get(rawKey) || { count: 0, sum: 0 };
         current.count += 1;
-        current.sum += payment.amount;
+        current.sum += Number.isFinite(amount) ? amount : 0;
         map.set(rawKey, current);
       });
 
@@ -102,7 +149,7 @@ const SubscriptionsReportPage: React.FC = () => {
   );
 
   const methodStats = useMemo(() => aggregate('method'), [aggregate]);
-  const botStats = useMemo(() => aggregate('botName'), [aggregate]);
+  const botStats = useMemo(() => aggregate('bot'), [aggregate]);
 
   const formatNumber = (value: number) =>
     new Intl.NumberFormat('ru-RU').format(value);

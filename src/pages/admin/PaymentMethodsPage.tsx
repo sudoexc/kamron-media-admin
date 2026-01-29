@@ -18,7 +18,14 @@ import { useToast } from '@/hooks/use-toast';
 const PaymentMethodsPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [data, setData] = useState<PaymentMethod[]>([]);
+  type NormalizedMethod = PaymentMethod & {
+    id: string | number;
+    label: string;
+    codeLabel?: string;
+    isActive?: boolean;
+    createdAt?: string;
+  };
+  const [data, setData] = useState<NormalizedMethod[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -26,13 +33,62 @@ const PaymentMethodsPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const limit = 10;
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await paymentMethodsApi.getAll({ page, limit, search });
-      setData(response.data);
+      const normalized = (response.data as Array<PaymentMethod | string>).map(
+        (method, index) => {
+          if (typeof method === 'string') {
+            return {
+              id: method,
+              title: method,
+              label: method,
+            };
+          }
+
+          const label =
+            method.title ||
+            method.name ||
+            method.code ||
+            method.provider ||
+            `Метод ${index + 1}`;
+          const id =
+            method.id ||
+            method.code ||
+            method.name ||
+            method.title ||
+            method.provider ||
+            String(index + 1);
+          return {
+            ...method,
+            id,
+            label,
+            codeLabel: method.code || method.provider || '',
+            isActive: method.is_active ?? method.isActive,
+            createdAt: method.created_at ?? method.createdAt,
+          };
+        }
+      );
+      const sorted = [...normalized].sort((a, b) => {
+        const aTime = a.createdAt ? Date.parse(a.createdAt) : NaN;
+        const bTime = b.createdAt ? Date.parse(b.createdAt) : NaN;
+        if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) {
+          return bTime - aTime;
+        }
+        const aId = Number(a.id);
+        const bId = Number(b.id);
+        if (!Number.isNaN(aId) && !Number.isNaN(bId) && aId !== bId) {
+          return bId - aId;
+        }
+        return String(b.id).localeCompare(String(a.id));
+      });
+      setData(sorted);
       setTotal(response.total);
       setTotalPages(response.totalPages);
     } catch (error) {
@@ -49,6 +105,10 @@ const PaymentMethodsPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [data]);
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -69,42 +129,70 @@ const PaymentMethodsPage: React.FC = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      await Promise.all(selectedIds.map((id) => paymentMethodsApi.delete(id)));
+      toast({ title: 'Успешно', description: 'Способы оплаты удалены' });
+      setSelectedIds([]);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось удалить выбранные способы оплаты',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkDeleting(false);
+      setBulkOpen(false);
+    }
+  };
+
   const columns = [
     {
       key: 'title',
       header: 'Название',
-      cell: (method: PaymentMethod) => (
-        <p className="font-medium">{method.title}</p>
+      cell: (method: NormalizedMethod) => (
+        <p className="font-medium">{method.label}</p>
       ),
     },
     {
-      key: 'provider',
-      header: 'Провайдер',
-      cell: (method: PaymentMethod) => method.provider.toUpperCase(),
+      key: 'code',
+      header: 'Код',
+      cell: (method: NormalizedMethod) =>
+        method.codeLabel ? method.codeLabel.toUpperCase() : '—',
     },
     {
       key: 'isActive',
       header: 'Статус',
-      cell: (method: PaymentMethod) => (
-        <StatusBadge
-          status={method.isActive ? 'active' : 'inactive'}
-          label={method.isActive ? 'Активен' : 'Неактивен'}
-        />
-      ),
+      cell: (method: NormalizedMethod) => {
+        const active = method.isActive;
+        return (
+          <StatusBadge
+            status={
+              active === undefined ? 'default' : active ? 'active' : 'inactive'
+            }
+            label={active === undefined ? '—' : active ? 'Активен' : 'Неактивен'}
+          />
+        );
+      },
     },
     {
       key: 'createdAt',
       header: 'Создан',
-      cell: (method: PaymentMethod) =>
-        format(new Date(method.createdAt), 'dd MMM yyyy', { locale: ru }),
+      cell: (method: NormalizedMethod) =>
+        method.createdAt
+          ? format(new Date(method.createdAt), 'dd MMM yyyy', { locale: ru })
+          : '—',
     },
     {
       key: 'actions',
       header: '',
-      cell: (method: PaymentMethod) => (
+      cell: (method: NormalizedMethod) => (
         <DataTableActions
           onEdit={() => navigate(`/admin/payment-methods/${method.id}/edit`)}
-          onDelete={() => setDeleteId(method.id)}
+          onDelete={() => setDeleteId(String(method.id))}
         />
       ),
     },
@@ -117,10 +205,17 @@ const PaymentMethodsPage: React.FC = () => {
           <h1 className="text-2xl font-bold">Способы оплаты</h1>
           <p className="text-muted-foreground">Управление способами оплаты</p>
         </div>
-        <Button onClick={() => navigate('/admin/payment-methods/create')}>
-          <Plus className="mr-2 h-4 w-4" />
-          Добавить способ
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectedIds.length > 0 && (
+            <Button variant="destructive" onClick={() => setBulkOpen(true)}>
+              Удалить выбранные ({selectedIds.length})
+            </Button>
+          )}
+          <Button onClick={() => navigate('/admin/payment-methods/create')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Добавить способ
+          </Button>
+        </div>
       </div>
 
       <Card className="glass">
@@ -141,7 +236,13 @@ const PaymentMethodsPage: React.FC = () => {
             columns={columns}
             data={data}
             isLoading={isLoading}
-            rowKey={(method) => method.id}
+            onRowClick={(method) =>
+              navigate(`/admin/payment-methods/${String(method.id)}/edit`)
+            }
+            selectable
+            selectedKeys={selectedIds}
+            onSelectedKeysChange={setSelectedIds}
+            rowKey={(method) => String(method.id)}
             emptyMessage="Способы оплаты не найдены"
           />
 
@@ -165,6 +266,17 @@ const PaymentMethodsPage: React.FC = () => {
         confirmLabel="Удалить"
         onConfirm={handleDelete}
         isLoading={isDeleting}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        title={`Удалить ${selectedIds.length} способов?`}
+        description="Это действие нельзя отменить. Способы оплаты будут удалены безвозвратно."
+        confirmLabel="Удалить"
+        onConfirm={handleBulkDelete}
+        isLoading={isBulkDeleting}
         variant="destructive"
       />
     </div>

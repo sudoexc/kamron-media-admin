@@ -7,20 +7,10 @@ import { DataTable } from '@/components/table/DataTable';
 import { DataTableSearch } from '@/components/table/DataTableSearch';
 import { DataTablePagination } from '@/components/table/DataTablePagination';
 import { DataTableActions } from '@/components/table/DataTableActions';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { messagesApi } from '@/api/entities';
 import { Message } from '@/types/entities';
-import { format } from 'date-fns';
-import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
-
-const statusLabels: Record<string, string> = {
-  sent: 'Отправлено',
-  delivered: 'Доставлено',
-  read: 'Прочитано',
-  failed: 'Ошибка',
-};
 
 const MessagesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -33,13 +23,24 @@ const MessagesPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const limit = 10;
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await messagesApi.getAll({ page, limit, search });
-      setData(response.data);
+      const sorted = [...response.data].sort((a, b) => {
+        const aId = Number(a.id);
+        const bId = Number(b.id);
+        if (!Number.isNaN(aId) && !Number.isNaN(bId) && aId !== bId) {
+          return bId - aId;
+        }
+        return String(b.id).localeCompare(String(a.id));
+      });
+      setData(sorted);
       setTotal(response.total);
       setTotalPages(response.totalPages);
     } catch (error) {
@@ -56,6 +57,10 @@ const MessagesPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [data]);
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -76,33 +81,54 @@ const MessagesPage: React.FC = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      await Promise.all(selectedIds.map((id) => messagesApi.delete(id)));
+      toast({ title: 'Успешно', description: 'Сообщения удалены' });
+      setSelectedIds([]);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось удалить выбранные сообщения',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkDeleting(false);
+      setBulkOpen(false);
+    }
+  };
+
   const columns = [
     {
-      key: 'user',
-      header: 'Пользователь',
+      key: 'identifier',
+      header: 'Идентификатор',
       cell: (msg: Message) => (
-        <p className="font-medium">{msg.userName || `ID: ${msg.userId}`}</p>
+        <p className="font-medium">{msg.identifier}</p>
       ),
     },
     {
-      key: 'text',
-      header: 'Текст',
+      key: 'message_ru',
+      header: 'Сообщение (RU)',
       cell: (msg: Message) => (
-        <p className="max-w-xs truncate">{msg.text}</p>
+        <p className="max-w-xs truncate">{msg.message_ru}</p>
       ),
     },
     {
-      key: 'status',
-      header: 'Статус',
+      key: 'message_en',
+      header: 'Сообщение (EN)',
       cell: (msg: Message) => (
-        <StatusBadge status={msg.status} label={statusLabels[msg.status]} />
+        <p className="max-w-xs truncate">{msg.message_en}</p>
       ),
     },
     {
-      key: 'createdAt',
-      header: 'Дата',
-      cell: (msg: Message) =>
-        format(new Date(msg.createdAt), 'dd MMM yyyy, HH:mm', { locale: ru }),
+      key: 'message_uz',
+      header: 'Сообщение (UZ)',
+      cell: (msg: Message) => (
+        <p className="max-w-xs truncate">{msg.message_uz}</p>
+      ),
     },
     {
       key: 'actions',
@@ -110,7 +136,7 @@ const MessagesPage: React.FC = () => {
       cell: (msg: Message) => (
         <DataTableActions
           onEdit={() => navigate(`/admin/messages/${msg.id}/edit`)}
-          onDelete={() => setDeleteId(msg.id)}
+          onDelete={() => setDeleteId(String(msg.id))}
         />
       ),
     },
@@ -121,12 +147,19 @@ const MessagesPage: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Сообщения</h1>
-          <p className="text-muted-foreground">Просмотр сообщений пользователей</p>
+          <p className="text-muted-foreground">Шаблоны уведомлений</p>
         </div>
-        <Button onClick={() => navigate('/admin/messages/create')}>
-          <Plus className="mr-2 h-4 w-4" />
-          Добавить сообщение
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectedIds.length > 0 && (
+            <Button variant="destructive" onClick={() => setBulkOpen(true)}>
+              Удалить выбранные ({selectedIds.length})
+            </Button>
+          )}
+          <Button onClick={() => navigate('/admin/messages/create')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Добавить сообщение
+          </Button>
+        </div>
       </div>
 
       <Card className="glass">
@@ -138,7 +171,7 @@ const MessagesPage: React.FC = () => {
                 setSearch(value);
                 setPage(1);
               }}
-              placeholder="Поиск..."
+              placeholder="Поиск по идентификатору или тексту..."
               showFilterButton={false}
             />
           </div>
@@ -147,7 +180,11 @@ const MessagesPage: React.FC = () => {
             columns={columns}
             data={data}
             isLoading={isLoading}
-            rowKey={(msg) => msg.id}
+            onRowClick={(message) => navigate(`/admin/messages/${message.id}/edit`)}
+            selectable
+            selectedKeys={selectedIds}
+            onSelectedKeysChange={setSelectedIds}
+            rowKey={(msg) => String(msg.id)}
             emptyMessage="Сообщения не найдены"
           />
 
@@ -171,6 +208,17 @@ const MessagesPage: React.FC = () => {
         confirmLabel="Удалить"
         onConfirm={handleDelete}
         isLoading={isDeleting}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        title={`Удалить ${selectedIds.length} сообщений?`}
+        description="Это действие нельзя отменить. Сообщения будут удалены безвозвратно."
+        confirmLabel="Удалить"
+        onConfirm={handleBulkDelete}
+        isLoading={isBulkDeleting}
         variant="destructive"
       />
     </div>

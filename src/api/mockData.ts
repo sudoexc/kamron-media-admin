@@ -129,131 +129,129 @@ const initialPlans: SubscriptionPlan[] = [
 ];
 
 const initialUsers: User[] = [
-  { id: '1', phone: '+7 (999) 123-45-67', name: 'Админ', email: 'admin@example.com', role: 'admin', createdAt: '2024-01-10T08:00:00Z' },
-  { id: '2', phone: '+7 (999) 234-56-78', name: 'Мария Сидорова', email: 'maria@example.com', role: 'user', createdAt: '2024-01-15T12:00:00Z' },
-  { id: '3', phone: '+7 (999) 345-67-89', name: 'Алексей Козлов', email: 'alex@example.com', role: 'user', createdAt: '2024-01-20T15:30:00Z' },
-  { id: '4', phone: '+7 (999) 456-78-90', name: 'Елена Новикова', email: 'elena@example.com', role: 'moderator', createdAt: '2024-02-01T10:00:00Z' },
-  { id: '5', phone: '+7 (999) 567-89-01', name: 'Дмитрий Волков', email: 'dmitry@example.com', role: 'user', createdAt: '2024-02-05T14:20:00Z' },
-  { id: '6', phone: '+7 (999) 678-90-12', name: 'Анна Морозова', email: 'anna@example.com', role: 'user', createdAt: '2024-02-10T09:45:00Z' },
+  { telegram_id: 5649451092, language: 'ru', is_active: true, created_at: '2024-02-10T09:45:00Z' },
+  { telegram_id: 5317913776, language: 'uz', is_active: false, created_at: '2024-02-08T12:10:00Z' },
+  { telegram_id: 5123456789, language: 'ru', is_active: true, created_at: '2024-01-15T12:00:00Z' },
 ];
 
 const initialPayments: Payment[] = [
   {
     id: '1',
-    userId: '2',
-    userName: 'Мария Сидорова',
-    botId: '1',
-    botName: 'Основной бот',
-    amount: 599,
+    user: 5649451092,
+    bot: 1,
+    subscription: 1,
+    amount: '599.00',
     method: 'card',
-    status: 'completed',
-    createdAt: '2024-02-15T10:30:00Z',
+    status: 'success',
+    created_at: '2024-02-15T10:30:00Z',
   },
   {
     id: '2',
-    userId: '3',
-    userName: 'Алексей Козлов',
-    botId: '2',
-    botName: 'Поддержка',
-    amount: 999,
+    user: 5317913776,
+    bot: 2,
+    subscription: 2,
+    amount: '999.00',
     method: 'card',
-    status: 'completed',
-    createdAt: '2024-02-15T11:45:00Z',
+    status: 'success',
+    created_at: '2024-02-15T11:45:00Z',
   },
   {
     id: '3',
-    userId: '5',
-    userName: 'Дмитрий Волков',
-    botId: '3',
-    botName: 'Тестовый',
-    amount: 299,
+    user: 5123456789,
+    bot: 3,
+    subscription: 3,
+    amount: '299.00',
     method: 'sbp',
     status: 'pending',
-    createdAt: '2024-02-15T14:00:00Z',
+    created_at: '2024-02-15T14:00:00Z',
   },
   {
     id: '4',
-    userId: '6',
-    userName: 'Анна Морозова',
-    botId: '1',
-    botName: 'Основной бот',
-    amount: 7999,
+    user: 5649451092,
+    bot: 1,
+    subscription: 4,
+    amount: '7999.00',
     method: 'card',
-    status: 'completed',
-    createdAt: '2024-02-14T16:20:00Z',
+    status: 'success',
+    created_at: '2024-02-14T16:20:00Z',
   },
   {
     id: '5',
-    userId: '2',
-    userName: 'Мария Сидорова',
-    botId: '4',
-    botName: 'Промо бот',
-    amount: 599,
+    user: 5649451092,
+    bot: 4,
+    subscription: 1,
+    amount: '599.00',
     method: 'yoomoney',
     status: 'failed',
-    createdAt: '2024-02-14T09:15:00Z',
+    created_at: '2024-02-14T09:15:00Z',
   },
 ];
 
 const initialSubscriptions: Subscription[] = [
   {
     id: '1',
-    userId: '2',
-    userName: 'Мария Сидорова',
-    planId: '2',
-    planTitle: 'Стандарт',
-    botId: '1',
-    botName: '@main_bot',
-    startAt: '2024-02-15T00:00:00Z',
-    endAt: '2024-03-15T00:00:00Z',
-    status: 'active',
-    createdAt: '2024-02-15T00:00:00Z',
+    user: 5649451092,
+    bot: 1,
+    plan: 2,
+    start_date: '2024-02-15T10:30:00Z',
+    end_date: '2024-03-15T10:30:00Z',
+    is_active: true,
+    created_at: '2024-02-15T10:30:00Z',
   },
   {
     id: '2',
-    userId: '3',
-    userName: 'Алексей Козлов',
-    planId: '3',
-    planTitle: 'Премиум',
-    botId: '2',
-    botName: '@support_bot',
-    startAt: '2024-02-15T00:00:00Z',
-    endAt: '2024-03-15T00:00:00Z',
-    status: 'active',
-    createdAt: '2024-02-15T00:00:00Z',
+    user: 5317913776,
+    bot: 2,
+    plan: 3,
+    start_date: '2024-02-15T11:45:00Z',
+    end_date: '2024-03-15T11:45:00Z',
+    is_active: true,
+    created_at: '2024-02-15T11:45:00Z',
   },
   {
     id: '3',
-    userId: '5',
-    userName: 'Дмитрий Волков',
-    planId: '1',
-    planTitle: 'Базовый',
-    botId: '3',
-    botName: '@test_bot',
-    startAt: '2024-01-20T00:00:00Z',
-    endAt: '2024-02-20T00:00:00Z',
-    status: 'expired',
-    createdAt: '2024-01-20T00:00:00Z',
+    user: 5123456789,
+    bot: 3,
+    plan: 1,
+    start_date: '2024-01-20T09:00:00Z',
+    end_date: '2024-02-20T09:00:00Z',
+    is_active: false,
+    created_at: '2024-01-20T09:00:00Z',
   },
   {
     id: '4',
-    userId: '6',
-    userName: 'Анна Морозова',
-    planId: '4',
-    planTitle: 'Годовой',
-    botId: '1',
-    botName: '@main_bot',
-    startAt: '2024-02-14T00:00:00Z',
-    endAt: '2025-02-14T00:00:00Z',
-    status: 'active',
-    createdAt: '2024-02-14T00:00:00Z',
+    user: 5649451092,
+    bot: 1,
+    plan: 4,
+    start_date: '2024-02-14T16:20:00Z',
+    end_date: '2025-02-14T16:20:00Z',
+    is_active: true,
+    created_at: '2024-02-14T16:20:00Z',
   },
 ];
 
 const initialMessages: Message[] = [
-  { id: '1', userId: '2', userName: 'Мария Сидорова', text: 'Здравствуйте! Как продлить подписку?', status: 'read', createdAt: '2024-02-15T10:00:00Z' },
-  { id: '2', userId: '3', userName: 'Алексей Козлов', text: 'Не работает оплата', status: 'delivered', createdAt: '2024-02-15T11:30:00Z' },
-  { id: '3', userId: '5', userName: 'Дмитрий Волков', text: 'Спасибо за быстрый ответ!', status: 'sent', createdAt: '2024-02-15T14:15:00Z' },
+  {
+    id: 1,
+    identifier: 'subscription_purchased',
+    message_ru: '✅ Спасибо за покупку! Ваша подписка активирована до {end_date}',
+    message_en: '✅ Thank you for your purchase! Your subscription is active until {end_date}',
+    message_uz: '✅ Xarid uchun rahmat! Obunangiz {end_date} gacha faol',
+  },
+  {
+    id: 2,
+    identifier: 'subscription_expiring',
+    message_ru: '⚠️ Ваша подписка истекает {end_date}. Продлите сейчас!',
+    message_en: '⚠️ Your subscription expires on {end_date}. Renew now!',
+    message_uz: '⚠️ Obunangiz {end_date} tugaydi. Hozir yangilang!',
+  },
+  {
+    id: 3,
+    identifier: 'subscription_expired',
+    message_ru: '❌ Ваша подписка истекла {end_date}. Продлите для продолжения использования.',
+    message_en: '❌ Your subscription expired on {end_date}. Renew to continue using.',
+    message_uz: '❌ Obunangiz {end_date} tugadi. Davom ettirish uchun yangilang.',
+  },
 ];
 
 const initialPaymentMethods: PaymentMethod[] = [
@@ -334,14 +332,17 @@ export const getMockDashboardStats = (): DashboardStats => {
   const subscriptions = getMockSubscriptions();
   const payments = getMockPayments();
   
-  const activeSubscriptions = subscriptions.filter(s => s.status === 'active').length;
+  const activeSubscriptions = subscriptions.filter(s => s.is_active).length;
+  const isPaidStatus = (status: string) =>
+    ['success', 'completed'].includes(status.toLowerCase());
+
   const todayPayments = payments.filter(p => {
-    const paymentDate = new Date(p.createdAt).toDateString();
-    return paymentDate === new Date().toDateString() && p.status === 'completed';
+    const paymentDate = new Date(p.created_at ?? '').toDateString();
+    return paymentDate === new Date().toDateString() && isPaidStatus(p.status);
   }).length;
   const totalRevenue = payments
-    .filter(p => p.status === 'completed')
-    .reduce((sum, p) => sum + p.amount, 0);
+    .filter(p => isPaidStatus(p.status))
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
   return {
     totalUsers: users.length,

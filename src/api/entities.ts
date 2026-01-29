@@ -11,16 +11,6 @@ import {
   Group,
 } from '@/types/entities';
 import {
-  getMockPayments,
-  setMockPayments,
-  getMockSubscriptions,
-  setMockSubscriptions,
-  getMockUsers,
-  setMockUsers,
-  getMockMessages,
-  setMockMessages,
-  getMockPaymentMethods,
-  setMockPaymentMethods,
   getMockGroups,
   setMockGroups,
   generateId,
@@ -28,8 +18,61 @@ import {
   mockAuthUser,
 } from './mockData';
 
+const normalizePaginatedResponse = <T>(
+  payload: unknown
+): PaginatedResponse<T> => {
+  if (Array.isArray(payload)) {
+    return {
+      data: payload as T[],
+      total: payload.length,
+      page: 1,
+      limit: payload.length,
+      totalPages: 1,
+    };
+  }
+
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.data)) {
+      const data = record.data as T[];
+      const total = Number(record.total ?? data.length);
+      const limit = Number(record.limit ?? data.length);
+      const totalPages =
+        Number(record.totalPages ?? (limit ? Math.ceil(total / limit) : 1)) || 1;
+      return {
+        data,
+        total,
+        page: Number(record.page ?? 1) || 1,
+        limit,
+        totalPages,
+      };
+    }
+    if (Array.isArray(record.results)) {
+      const data = record.results as T[];
+      const total = Number(record.count ?? data.length);
+      const limit = Number(record.limit ?? data.length);
+      const totalPages = limit ? Math.ceil(total / limit) : 1;
+      return {
+        data,
+        total,
+        page: Number(record.page ?? 1) || 1,
+        limit,
+        totalPages,
+      };
+    }
+  }
+
+  return {
+    data: [],
+    total: 0,
+    page: 1,
+    limit: 0,
+    totalPages: 1,
+  };
+};
+
 // Generic CRUD factory for mock mode
-function createMockCrud<T extends { id: string; createdAt?: string }>(
+function createMockCrud<T extends { id: string | number; createdAt?: string; created_at?: string }>(
   entityType: string,
   getData: () => T[],
   setData: (data: T[]) => void,
@@ -179,70 +222,79 @@ export const plansApi = {
   delete: (id: string | number) => apiClient.delete(`/plans/${id}/`).then(() => undefined),
 };
 
-export const paymentsApi = MOCK_MODE
-  ? createMockCrud<Payment>('payment', getMockPayments, setMockPayments, (p) => `Оплата #${p.id}`)
-  : {
-      getAll: (params?: { page?: number; limit?: number; search?: string }) =>
-        apiClient.get<PaginatedResponse<Payment>>('/payments', { params }).then((r) => r.data),
-      getById: (id: string) => apiClient.get<Payment>(`/payments/${id}`).then((r) => r.data),
-      create: (data: Omit<Payment, 'id' | 'createdAt'>) =>
-        apiClient.post<Payment>('/payments', data).then((r) => r.data),
-      update: (id: string, data: Partial<Payment>) =>
-        apiClient.patch<Payment>(`/payments/${id}`, data).then((r) => r.data),
-      delete: (id: string) => apiClient.delete(`/payments/${id}`).then(() => undefined),
-    };
+export const paymentsApi = {
+  getAll: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) =>
+    apiClient
+      .get<Payment[] | PaginatedResponse<Payment>>('/payments/', { params })
+      .then((r) => normalizePaginatedResponse<Payment>(r.data)),
+  getById: (id: string | number) =>
+    apiClient.get<Payment>(`/payments/${id}/`).then((r) => r.data),
+  create: (data: Record<string, unknown>) =>
+    apiClient.post<Payment>('/payments/', data).then((r) => r.data),
+  update: (id: string | number, data: Record<string, unknown>) =>
+    apiClient.patch<Payment>(`/payments/${id}/`, data).then((r) => r.data),
+  delete: (id: string | number) =>
+    apiClient.delete(`/payments/${id}/`).then(() => undefined),
+};
 
-export const subscriptionsApi = MOCK_MODE
-  ? createMockCrud<Subscription>('subscription', getMockSubscriptions, setMockSubscriptions, (s) => `Подписка ${s.userName || s.userId}`)
-  : {
-      getAll: (params?: { page?: number; limit?: number; search?: string }) =>
-        apiClient.get<PaginatedResponse<Subscription>>('/subscriptions', { params }).then((r) => r.data),
-      getById: (id: string) => apiClient.get<Subscription>(`/subscriptions/${id}`).then((r) => r.data),
-      create: (data: Omit<Subscription, 'id'>) =>
-        apiClient.post<Subscription>('/subscriptions', data).then((r) => r.data),
-      update: (id: string, data: Partial<Subscription>) =>
-        apiClient.patch<Subscription>(`/subscriptions/${id}`, data).then((r) => r.data),
-      delete: (id: string) => apiClient.delete(`/subscriptions/${id}`).then(() => undefined),
-    };
+export const subscriptionsApi = {
+  getAll: () => apiClient.get<Subscription[]>('/subscriptions/').then((r) => r.data),
+  getById: (id: string | number) =>
+    apiClient.get<Subscription>(`/subscriptions/${id}/`).then((r) => r.data),
+  create: (data: Omit<Subscription, 'id' | 'created_at'>) =>
+    apiClient.post<Subscription>('/subscriptions/', data).then((r) => r.data),
+  update: (id: string | number, data: Partial<Subscription>) =>
+    apiClient.patch<Subscription>(`/subscriptions/${id}/`, data).then((r) => r.data),
+  delete: (id: string | number) =>
+    apiClient.delete(`/subscriptions/${id}/`).then(() => undefined),
+};
 
-export const usersApi = MOCK_MODE
-  ? createMockCrud<User>('user', getMockUsers, setMockUsers, (u) => u.name)
-  : {
-      getAll: (params?: { page?: number; limit?: number; search?: string }) =>
-        apiClient.get<PaginatedResponse<User>>('/users', { params }).then((r) => r.data),
-      getById: (id: string) => apiClient.get<User>(`/users/${id}`).then((r) => r.data),
-      create: (data: Omit<User, 'id' | 'createdAt'>) =>
-        apiClient.post<User>('/users', data).then((r) => r.data),
-      update: (id: string, data: Partial<User>) =>
-        apiClient.patch<User>(`/users/${id}`, data).then((r) => r.data),
-      delete: (id: string) => apiClient.delete(`/users/${id}`).then(() => undefined),
-    };
+export const usersApi = {
+  getAll: () => apiClient.get<User[]>('/users/').then((r) => r.data),
+  getById: (telegramId: string | number) =>
+    apiClient.get<User>(`/users/${telegramId}/`).then((r) => r.data),
+  create: (data: User) => apiClient.post<User>('/users/', data).then((r) => r.data),
+  update: (telegramId: string | number, data: Partial<User>) =>
+    apiClient.patch<User>(`/users/${telegramId}/`, data).then((r) => r.data),
+  delete: (telegramId: string | number) =>
+    apiClient.delete(`/users/${telegramId}/`).then(() => undefined),
+};
 
-export const messagesApi = MOCK_MODE
-  ? createMockCrud<Message>('message', getMockMessages, setMockMessages, (m) => m.text.slice(0, 30))
-  : {
-      getAll: (params?: { page?: number; limit?: number; search?: string }) =>
-        apiClient.get<PaginatedResponse<Message>>('/messages', { params }).then((r) => r.data),
-      getById: (id: string) => apiClient.get<Message>(`/messages/${id}`).then((r) => r.data),
-      create: (data: Omit<Message, 'id' | 'createdAt'>) =>
-        apiClient.post<Message>('/messages', data).then((r) => r.data),
-      update: (id: string, data: Partial<Message>) =>
-        apiClient.patch<Message>(`/messages/${id}`, data).then((r) => r.data),
-      delete: (id: string) => apiClient.delete(`/messages/${id}`).then(() => undefined),
-    };
+export const messagesApi = {
+  getAll: (params?: { page?: number; limit?: number; search?: string }) =>
+    apiClient
+      .get<Message[] | PaginatedResponse<Message>>('/messages/', { params })
+      .then((r) => normalizePaginatedResponse<Message>(r.data)),
+  getById: (id: string | number) =>
+    apiClient.get<Message>(`/messages/${id}/`).then((r) => r.data),
+  create: (data: Partial<Message>) =>
+    apiClient.post<Message>('/messages/', data).then((r) => r.data),
+  update: (id: string | number, data: Partial<Message>) =>
+    apiClient.patch<Message>(`/messages/${id}/`, data).then((r) => r.data),
+  delete: (id: string | number) =>
+    apiClient.delete(`/messages/${id}/`).then(() => undefined),
+};
 
-export const paymentMethodsApi = MOCK_MODE
-  ? createMockCrud<PaymentMethod>('payment_method', getMockPaymentMethods, setMockPaymentMethods, (pm) => pm.title)
-  : {
-      getAll: (params?: { page?: number; limit?: number; search?: string }) =>
-        apiClient.get<PaginatedResponse<PaymentMethod>>('/payment-methods', { params }).then((r) => r.data),
-      getById: (id: string) => apiClient.get<PaymentMethod>(`/payment-methods/${id}`).then((r) => r.data),
-      create: (data: Omit<PaymentMethod, 'id' | 'createdAt'>) =>
-        apiClient.post<PaymentMethod>('/payment-methods', data).then((r) => r.data),
-      update: (id: string, data: Partial<PaymentMethod>) =>
-        apiClient.patch<PaymentMethod>(`/payment-methods/${id}`, data).then((r) => r.data),
-      delete: (id: string) => apiClient.delete(`/payment-methods/${id}`).then(() => undefined),
-    };
+export const paymentMethodsApi = {
+  getAll: (params?: { page?: number; limit?: number; search?: string }) =>
+    apiClient
+      .get<PaymentMethod[] | PaginatedResponse<PaymentMethod>>('/methods/', { params })
+      .then((r) => normalizePaginatedResponse<PaymentMethod>(r.data)),
+  getById: (id: string | number) =>
+    apiClient.get<PaymentMethod>(`/methods/${id}/`).then((r) => r.data),
+  create: (data: Partial<PaymentMethod>) =>
+    apiClient.post<PaymentMethod>('/methods/', data).then((r) => r.data),
+  update: (id: string | number, data: Partial<PaymentMethod>) =>
+    apiClient.patch<PaymentMethod>(`/methods/${id}/`, data).then((r) => r.data),
+  delete: (id: string | number) =>
+    apiClient.delete(`/methods/${id}/`).then(() => undefined),
+};
 
 export const groupsApi = MOCK_MODE
   ? createMockCrud<Group>('group', getMockGroups, setMockGroups, (g) => g.name)

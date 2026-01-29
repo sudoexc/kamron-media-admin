@@ -6,7 +6,7 @@ export interface Bot {
   username: string;
   notification_group_id: number;
   bot_token: string;
-  request_port: number;
+  request_port: number | null;
   created_at?: string;
 }
 
@@ -24,55 +24,65 @@ export interface SubscriptionPlan {
 }
 
 export interface Payment {
-  id: string;
-  userId: string;
-  userName?: string;
-  botId?: string;
-  botName?: string;
-  amount: number;
+  id: string | number;
+  user: User | number;
+  bot: Bot | number;
+  subscription?: Subscription | number | null;
   method: string;
-  status: 'pending' | 'completed' | 'failed' | 'refunded';
-  createdAt: string;
+  amount: string;
+  status: string;
+  transaction_id?: string | null;
+  created_at?: string;
 }
 
+export type SubscriptionRef =
+  | number
+  | {
+      id?: number;
+      telegram_id?: number;
+      title?: string;
+      name?: string;
+      username?: string;
+    };
+
 export interface Subscription {
-  id: string;
-  userId: string;
-  userName?: string;
-  planId: string;
-  planTitle?: string;
-  botId?: string | number;
-  botName?: string;
-  startAt: string;
-  endAt: string;
-  status: 'active' | 'expired' | 'cancelled';
-  createdAt?: string;
+  id: string | number;
+  user: SubscriptionRef;
+  bot: SubscriptionRef;
+  plan: SubscriptionRef;
+  start_date: string;
+  end_date?: string | null;
+  is_active: boolean;
+  created_at?: string;
 }
 
 export interface User {
-  id: string;
-  phone: string;
-  name: string;
-  email?: string;
-  role: 'admin' | 'user' | 'moderator';
-  createdAt: string;
+  id?: number;
+  telegram_id: number;
+  language: string;
+  is_active: boolean;
+  created_at?: string;
 }
 
 export interface Message {
-  id: string;
-  userId: string;
-  userName?: string;
-  text: string;
-  status: 'sent' | 'delivered' | 'read' | 'failed';
-  createdAt: string;
+  id: string | number;
+  identifier: string;
+  message_ru: string;
+  message_en: string;
+  message_uz: string;
+  created_at?: string;
 }
 
 export interface PaymentMethod {
-  id: string;
-  title: string;
-  provider: string;
-  isActive: boolean;
-  createdAt: string;
+  id?: string | number;
+  title?: string;
+  name?: string;
+  code?: string;
+  provider?: string;
+  is_active?: boolean;
+  isActive?: boolean;
+  created_at?: string;
+  createdAt?: string;
 }
 
 export interface Group {

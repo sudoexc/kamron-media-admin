@@ -1,46 +1,69 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/table/DataTable';
 import { DataTableSearch } from '@/components/table/DataTableSearch';
-import { DataTablePagination } from '@/components/table/DataTablePagination';
 import { DataTableActions } from '@/components/table/DataTableActions';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { subscriptionsApi } from '@/api/entities';
-import { Subscription } from '@/types/entities';
+import { subscriptionsApi, botsApi, plansApi, usersApi } from '@/api/entities';
+import { Subscription, Bot, SubscriptionPlan, User, SubscriptionRef } from '@/types/entities';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
-
-const statusLabels: Record<string, string> = {
-  active: 'Активна',
-  expired: 'Истекла',
-  cancelled: 'Отменена',
-};
 
 const SubscriptionsPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [data, setData] = useState<Subscription[]>([]);
+  const [bots, setBots] = useState<Bot[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const limit = 10;
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await subscriptionsApi.getAll({ page, limit, search });
-      setData(response.data);
-      setTotal(response.total);
-      setTotalPages(response.totalPages);
+      const normalizeList = <T,>(
+        payload: T[] | { results?: T[] } | null | undefined
+      ): T[] => {
+        if (Array.isArray(payload)) return payload;
+        return payload?.results ?? [];
+      };
+
+      const [subsResponse, botsResponse, plansResponse, usersResponse] =
+        await Promise.all([
+          subscriptionsApi.getAll(),
+          botsApi.getAll(),
+          plansApi.getAll(),
+          usersApi.getAll(),
+        ]);
+      const subsList = normalizeList(subsResponse as unknown);
+      const sortedSubs = [...subsList].sort((a, b) => {
+        const aTime = a.created_at ? Date.parse(a.created_at) : Date.parse(a.start_date);
+        const bTime = b.created_at ? Date.parse(b.created_at) : Date.parse(b.start_date);
+        if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) {
+          return bTime - aTime;
+        }
+        const aId = Number(a.id);
+        const bId = Number(b.id);
+        if (!Number.isNaN(aId) && !Number.isNaN(bId) && aId !== bId) {
+          return bId - aId;
+        }
+        return String(b.id).localeCompare(String(a.id));
+      });
+      setData(sortedSubs);
+      setBots(normalizeList(botsResponse as unknown));
+      setPlans(normalizeList(plansResponse as unknown));
+      setUsers(normalizeList(usersResponse as unknown));
     } catch (error) {
       toast({
         title: 'Ошибка',
@@ -50,11 +73,15 @@ const SubscriptionsPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [page, search, toast]);
+  }, [toast]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [data]);
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -75,52 +102,143 @@ const SubscriptionsPage: React.FC = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      await Promise.all(selectedIds.map((id) => subscriptionsApi.delete(id)));
+      toast({ title: 'Успешно', description: 'Подписки удалены' });
+      setSelectedIds([]);
+      fetchData();
+    } catch (error) {
+      toast({
+        title: 'Ошибка',
+        description: 'Не удалось удалить выбранные подписки',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBulkDeleting(false);
+      setBulkOpen(false);
+    }
+  };
+
+  const getRefId = (value: SubscriptionRef): number | null => {
+    if (typeof value === 'number') return value;
+    if (!value || typeof value !== 'object') return null;
+    if (typeof value.telegram_id === 'number') return value.telegram_id;
+    if (typeof value.id === 'number') return value.id;
+    return null;
+  };
+
+  const getRefLabel = (value: SubscriptionRef): string => {
+    if (typeof value === 'number') return String(value);
+    if (!value || typeof value !== 'object') return '—';
+    return (
+      value.username ||
+      value.title ||
+      value.name ||
+      (value.telegram_id ? String(value.telegram_id) : '') ||
+      (value.id ? String(value.id) : '') ||
+      '—'
+    );
+  };
+
+  const botsMap = useMemo(() => {
+    const map = new Map<number, string>();
+    bots.forEach((bot) => map.set(Number(bot.id), bot.title));
+    return map;
+  }, [bots]);
+
+  const plansMap = useMemo(() => {
+    const map = new Map<number, string>();
+    plans.forEach((plan) => map.set(Number(plan.id), plan.name));
+    return map;
+  }, [plans]);
+
+  const usersMap = useMemo(() => {
+    const map = new Map<number, string>();
+    users.forEach((user) => {
+      const label = String(user.telegram_id ?? user.id ?? '');
+      if (user.id) {
+        map.set(Number(user.id), label);
+      }
+      if (user.telegram_id) {
+        map.set(Number(user.telegram_id), label);
+      }
+    });
+    return map;
+  }, [users]);
+
+  const filtered = data.filter((sub) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      getRefLabel(sub.user).toLowerCase().includes(q) ||
+      getRefLabel(sub.bot).toLowerCase().includes(q) ||
+      getRefLabel(sub.plan).toLowerCase().includes(q)
+    );
+  });
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return format(date, 'dd MMM yyyy, HH:mm', { locale: ru });
+  };
+
   const columns = [
     {
       key: 'user',
       header: 'USER',
       cell: (sub: Subscription) => (
-        <p className="font-medium">{sub.userName || sub.userId}</p>
+        <p className="font-medium">
+          {(() => {
+            const id = getRefId(sub.user);
+            return (id ? usersMap.get(id) : null) || getRefLabel(sub.user);
+          })()}
+        </p>
       ),
     },
     {
       key: 'bot',
       header: 'BOT',
-      cell: (sub: Subscription) => sub.botName || sub.botId || '—',
+      cell: (sub: Subscription) => {
+        const id = getRefId(sub.bot);
+        return (id ? botsMap.get(id) : null) || getRefLabel(sub.bot);
+      },
     },
     {
       key: 'plan',
       header: 'PLAN',
-      cell: (sub: Subscription) => sub.planTitle || sub.planId,
+      cell: (sub: Subscription) => {
+        const id = getRefId(sub.plan);
+        return (id ? plansMap.get(id) : null) || getRefLabel(sub.plan);
+      },
     },
     {
-      key: 'startAt',
+      key: 'start_date',
       header: 'START DATE',
-      cell: (sub: Subscription) =>
-        format(new Date(sub.startAt), 'dd MMM yyyy, HH:mm', { locale: ru }),
+      cell: (sub: Subscription) => formatDateTime(sub.start_date),
     },
     {
-      key: 'endAt',
+      key: 'end_date',
       header: 'END DATE',
-      cell: (sub: Subscription) =>
-        sub.endAt
-          ? format(new Date(sub.endAt), 'dd MMM yyyy, HH:mm', { locale: ru })
-          : '—',
+      cell: (sub: Subscription) => formatDateTime(sub.end_date),
     },
     {
-      key: 'status',
+      key: 'is_active',
       header: 'IS ACTIVE',
       cell: (sub: Subscription) => (
-        <StatusBadge status={sub.status} label={statusLabels[sub.status]} />
+        <StatusBadge
+          status={sub.is_active ? 'active' : 'inactive'}
+          label={sub.is_active ? 'Активна' : 'Неактивна'}
+        />
       ),
     },
     {
-      key: 'createdAt',
+      key: 'created_at',
       header: 'CREATED AT',
-      cell: (sub: Subscription) =>
-        format(new Date(sub.createdAt || sub.startAt), 'dd MMM yyyy, HH:mm', {
-          locale: ru,
-        }),
+      cell: (sub: Subscription) => formatDateTime(sub.created_at || sub.start_date),
     },
     {
       key: 'actions',
@@ -141,10 +259,17 @@ const SubscriptionsPage: React.FC = () => {
           <h1 className="text-2xl font-bold">Подписки</h1>
           <p className="text-muted-foreground">Управление подписками пользователей</p>
         </div>
+        <div className="flex items-center gap-2">
+          {selectedIds.length > 0 && (
+            <Button variant="destructive" onClick={() => setBulkOpen(true)}>
+              Удалить выбранные ({selectedIds.length})
+            </Button>
+          )}
         <Button onClick={() => navigate('/admin/subscriptions/create')}>
           <Plus className="mr-2 h-4 w-4" />
           Добавить подписку
         </Button>
+        </div>
       </div>
 
       <Card className="glass">
@@ -154,7 +279,6 @@ const SubscriptionsPage: React.FC = () => {
               value={search}
               onChange={(value) => {
                 setSearch(value);
-                setPage(1);
               }}
               placeholder="Поиск..."
               showFilterButton={false}
@@ -163,21 +287,15 @@ const SubscriptionsPage: React.FC = () => {
 
           <DataTable
             columns={columns}
-            data={data}
+            data={filtered}
             isLoading={isLoading}
-            rowKey={(sub) => sub.id}
+            onRowClick={(sub) => navigate(`/admin/subscriptions/${sub.id}/edit`)}
+            selectable
+            selectedKeys={selectedIds}
+            onSelectedKeysChange={setSelectedIds}
+            rowKey={(sub) => String(sub.id)}
             emptyMessage="Подписки не найдены"
           />
-
-          {totalPages > 1 && (
-            <DataTablePagination
-              page={page}
-              totalPages={totalPages}
-              total={total}
-              limit={limit}
-              onPageChange={setPage}
-            />
-          )}
         </CardContent>
       </Card>
 
@@ -189,6 +307,17 @@ const SubscriptionsPage: React.FC = () => {
         confirmLabel="Удалить"
         onConfirm={handleDelete}
         isLoading={isDeleting}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={bulkOpen}
+        onOpenChange={setBulkOpen}
+        title={`Удалить ${selectedIds.length} подписок?`}
+        description="Это действие нельзя отменить. Подписки будут удалены безвозвратно."
+        confirmLabel="Удалить"
+        onConfirm={handleBulkDelete}
+        isLoading={isBulkDeleting}
         variant="destructive"
       />
     </div>

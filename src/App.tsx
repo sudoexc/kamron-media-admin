@@ -15,11 +15,15 @@ import BotFormPage from "./pages/admin/BotFormPage";
 import PlansPage from "./pages/admin/PlansPage";
 import PlanFormPage from "./pages/admin/PlanFormPage";
 import PaymentsPage from "./pages/admin/PaymentsPage";
+import PaymentFormPage from "./pages/admin/PaymentFormPage";
 import SubscriptionsPage from "./pages/admin/SubscriptionsPage";
 import UsersPage from "./pages/admin/UsersPage";
+import UserFormPage from "./pages/admin/UserFormPage";
 import MessagesPage from "./pages/admin/MessagesPage";
+import MessageFormPage from "./pages/admin/MessageFormPage";
 import PaymentMethodsPage from "./pages/admin/PaymentMethodsPage";
 import SubscriptionsReportPage from "./pages/admin/SubscriptionsReportPage";
+import SubscriptionFormPage from "./pages/admin/SubscriptionFormPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -56,20 +60,20 @@ const App = () => (
                 <Route path="subscription-plans/:id/edit" element={<PlanFormPage />} />
                 
                 <Route path="payments" element={<PaymentsPage />} />
-                <Route path="payments/create" element={<PaymentsPage />} />
-                <Route path="payments/:id/edit" element={<PaymentsPage />} />
+                <Route path="payments/create" element={<PaymentFormPage />} />
+                <Route path="payments/:id/edit" element={<PaymentFormPage />} />
                 
                 <Route path="subscriptions" element={<SubscriptionsPage />} />
-                <Route path="subscriptions/create" element={<SubscriptionsPage />} />
-                <Route path="subscriptions/:id/edit" element={<SubscriptionsPage />} />
+                <Route path="subscriptions/create" element={<SubscriptionFormPage />} />
+                <Route path="subscriptions/:id/edit" element={<SubscriptionFormPage />} />
                 
                 <Route path="users" element={<UsersPage />} />
-                <Route path="users/create" element={<UsersPage />} />
-                <Route path="users/:id/edit" element={<UsersPage />} />
+                <Route path="users/create" element={<UserFormPage />} />
+                <Route path="users/:id/edit" element={<UserFormPage />} />
                 
                 <Route path="messages" element={<MessagesPage />} />
-                <Route path="messages/create" element={<MessagesPage />} />
-                <Route path="messages/:id/edit" element={<MessagesPage />} />
+                <Route path="messages/create" element={<MessageFormPage />} />
+                <Route path="messages/:id/edit" element={<MessageFormPage />} />
                 
                 <Route path="payment-methods" element={<PaymentMethodsPage />} />
                 <Route path="payment-methods/create" element={<PaymentMethodsPage />} />

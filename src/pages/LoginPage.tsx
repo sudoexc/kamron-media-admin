@@ -34,7 +34,7 @@ const LoginPage: React.FC = () => {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      username: 'admin',
+      username: '',
       password: '',
     },
   });
@@ -82,7 +82,6 @@ const LoginPage: React.FC = () => {
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
-                placeholder="admin"
                 {...register('username')}
                 className="h-11"
                 disabled={isLoading}
@@ -97,7 +96,6 @@ const LoginPage: React.FC = () => {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
                 {...register('password')}
                 className="h-11"
                 disabled={isLoading}
@@ -119,10 +117,6 @@ const LoginPage: React.FC = () => {
             </Button>
           </form>
 
-          <div className="mt-6 p-4 rounded-lg bg-muted/50 border border-border text-sm text-muted-foreground">
-            Данные логина отправляются на `/api/token/`, а полученные access/refresh сохраняются
-            автоматически.
-          </div>
         </CardContent>
       </Card>
     </div>
