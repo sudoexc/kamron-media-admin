@@ -22,7 +22,7 @@ const STORAGE_KEYS = {
   MESSAGES: 'admin_messages',
   PAYMENT_METHODS: 'admin_payment_methods',
   GROUPS: 'admin_groups',
-  RECENT_ACTIONS: 'admin_recent_actions',
+  RECENT_ACTIONS: 'admin_recent_actions_v2',
 };
 
 // Initial mock data
@@ -267,13 +267,7 @@ const initialGroups: Group[] = [
   { id: '3', name: 'Пользователи', permissionsCount: 5, createdAt: '2024-01-01T00:00:00Z' },
 ];
 
-const initialRecentActions: RecentAction[] = [
-  { id: '1', entityType: 'user', entityId: '6', entityName: 'Анна Морозова', action: 'create', userId: '1', userName: 'Админ', timestamp: '2024-02-15T14:30:00Z' },
-  { id: '2', entityType: 'payment', entityId: '4', entityName: 'Оплата #4', action: 'create', userId: '1', userName: 'Админ', timestamp: '2024-02-15T14:00:00Z' },
-  { id: '3', entityType: 'subscription', entityId: '4', entityName: 'Подписка Анна Морозова', action: 'create', userId: '1', userName: 'Админ', timestamp: '2024-02-15T13:45:00Z' },
-  { id: '4', entityType: 'bot', entityId: '4', entityName: 'Промо бот', action: 'edit', userId: '1', userName: 'Админ', timestamp: '2024-02-15T12:00:00Z' },
-  { id: '5', entityType: 'plan', entityId: '5', entityName: 'Пробный', action: 'create', userId: '1', userName: 'Админ', timestamp: '2024-02-15T10:30:00Z' },
-];
+const initialRecentActions: RecentAction[] = [];
 
 // Helper to get or initialize data
 function getStorageData<T>(key: string, initialData: T[]): T[] {
