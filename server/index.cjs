@@ -63,7 +63,7 @@ const proxyRequest = (req, res) => {
   const target = new URL(backendUrl);
   const isHttps = target.protocol === 'https:';
   const requestFn = isHttps ? https.request : http.request;
-  const forwardPath = req.url.replace(/^\\/api/, '') || '/';
+  const forwardPath = req.url.replace(/^\/api/, '') || '/';
 
   const options = {
     protocol: target.protocol,
