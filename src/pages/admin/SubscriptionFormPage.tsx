@@ -45,8 +45,6 @@ const subscriptionSchema = z.object({
       .int('Только целое число')
       .min(1, 'Выберите план')
   ),
-  start_date: z.string().min(1, 'Выберите дату начала'),
-  end_date: z.string().optional(),
   is_active: z.boolean(),
 });
 
@@ -75,8 +73,6 @@ const SubscriptionFormPage: React.FC = () => {
       user: 0,
       bot: 0,
       plan: 0,
-      start_date: '',
-      end_date: '',
       is_active: true,
     },
   });
@@ -85,6 +81,11 @@ const SubscriptionFormPage: React.FC = () => {
   const selectedUser = watch('user');
   const selectedBot = watch('bot');
   const selectedPlan = watch('plan');
+  const [initialPlanId, setInitialPlanId] = useState<number | null>(null);
+  const [existingDates, setExistingDates] = useState<{ start: string | null; end: string | null }>({
+    start: null,
+    end: null,
+  });
 
   const getRefId = (value: SubscriptionRef): number | null => {
     if (typeof value === 'number') return value;
@@ -171,20 +172,16 @@ const SubscriptionFormPage: React.FC = () => {
       try {
         const subscription = await subscriptionsApi.getById(id);
         if (subscription) {
+          const planId = getRefId(subscription.plan) || 0;
           setValue('user', getRefId(subscription.user) || 0);
           setValue('bot', getRefId(subscription.bot) || 0);
-          setValue('plan', getRefId(subscription.plan) || 0);
-          const start = new Date(subscription.start_date);
-          if (!Number.isNaN(start.getTime())) {
-            setValue('start_date', start.toISOString().slice(0, 10));
-          }
-          if (subscription.end_date) {
-            const end = new Date(subscription.end_date);
-            if (!Number.isNaN(end.getTime())) {
-              setValue('end_date', end.toISOString().slice(0, 10));
-            }
-          }
+          setValue('plan', planId);
+          setInitialPlanId(planId || null);
           setValue('is_active', subscription.is_active);
+          setExistingDates({
+            start: subscription.start_date || null,
+            end: subscription.end_date ?? null,
+          });
         }
       } catch (error) {
         toast({
@@ -201,16 +198,6 @@ const SubscriptionFormPage: React.FC = () => {
     loadOptions();
     loadSubscription();
   }, [id, navigate, setValue, toast]);
-
-  useEffect(() => {
-    if (!isLifetimePlan) return;
-    const today = new Date();
-    const todayDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(
-      today.getDate()
-    )}`;
-    setValue('start_date', todayDate);
-    setValue('end_date', '');
-  }, [isLifetimePlan, setValue]);
 
   const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -233,26 +220,33 @@ const SubscriptionFormPage: React.FC = () => {
     setIsLoading(true);
     try {
       const currentTime = getCurrentTimeString();
-      let startAt = buildDateTimeString(data.start_date, currentTime);
-      let endAt =
-        data.end_date
-          ? buildDateTimeString(data.end_date, currentTime)
-          : null;
+      const today = new Date();
+      const todayDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(
+        today.getDate()
+      )}`;
+      let startAt = buildDateTimeString(todayDate, currentTime);
+      let endAt: string | null = null;
 
-      if (isLifetimePlan) {
-        const today = new Date();
-        const todayDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(
-          today.getDate()
-        )}`;
-        startAt = buildDateTimeString(todayDate, currentTime);
-        endAt = null;
-      } else if (!endAt) {
-        const duration =
-          planOptions.find((option) => option.id === data.plan)?.duration ?? null;
-        const startDate = buildDateTimeObject(data.start_date, currentTime);
-        if (duration && !Number.isNaN(startDate.getTime())) {
+      const duration =
+        planOptions.find((option) => option.id === data.plan)?.duration ?? null;
+
+      if (!isLifetimePlan && duration && !Number.isNaN(duration)) {
+        const startDate = buildDateTimeObject(todayDate, currentTime);
+        if (!Number.isNaN(startDate.getTime())) {
           const endDate = new Date(startDate.getTime() + duration * 24 * 60 * 60 * 1000);
           endAt = formatLocalDateTime(endDate);
+        }
+      }
+
+      if (isEdit && initialPlanId && initialPlanId === data.plan) {
+        // Do not shift dates when plan unchanged.
+        if (existingDates.start) {
+          startAt = existingDates.start;
+        }
+        if (existingDates.end) {
+          endAt = existingDates.end;
+        } else if (isLifetimePlan) {
+          endAt = null;
         }
       }
 
@@ -442,30 +436,6 @@ const SubscriptionFormPage: React.FC = () => {
               {errors.plan && (
                 <p className="text-sm text-destructive">{errors.plan.message as string}</p>
               )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="start_date">Start date</Label>
-                <Input
-                  id="start_date"
-                  type="date"
-                  {...register('start_date')}
-                  disabled={isLoading || isLifetimePlan}
-                />
-                {errors.start_date && (
-                  <p className="text-sm text-destructive">{errors.start_date.message}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="end_date">End date</Label>
-                <Input
-                  id="end_date"
-                  type="date"
-                  {...register('end_date')}
-                  disabled={isLoading || isLifetimePlan}
-                />
-              </div>
             </div>
 
             <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30">
