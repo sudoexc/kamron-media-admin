@@ -257,6 +257,7 @@ const SubscriptionFormPage: React.FC = () => {
             bot_id: data.bot,
             plan_id: data.plan,
             language: getUserLanguage(data.user),
+            message_identifier: 'subscription_purchased',
           });
         } catch (error) {
           let details = '';

@@ -10,11 +10,13 @@ import { DataTableActions } from '@/components/table/DataTableActions';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { subscriptionsApi, botsApi, plansApi, usersApi } from '@/api/entities';
+import { apiClient } from '@/api/client';
 import { Subscription, Bot, SubscriptionPlan, User, SubscriptionRef } from '@/types/entities';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
 import { logRecentAction } from '@/lib/recent-actions';
+import axios from 'axios';
 
 const SubscriptionsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -93,6 +95,42 @@ const SubscriptionsPage: React.FC = () => {
     try {
       const target = data.find((sub) => String(sub.id) === deleteId);
       await subscriptionsApi.delete(deleteId);
+      if (target) {
+        const userId = getRefId(target.user);
+        const botId = getRefId(target.bot);
+        const planId = getRefId(target.plan);
+        if (userId && botId && planId) {
+          try {
+            await apiClient.post('/send_purchase_notification/', {
+              user_id: userId,
+              bot_id: botId,
+              plan_id: planId,
+              language: getUserLanguage(userId),
+              message_identifier: 'subscription_expired',
+            });
+          } catch (error) {
+            let details = '';
+            if (axios.isAxiosError(error)) {
+              const data = error.response?.data as
+                | Record<string, unknown>
+                | string
+                | undefined;
+              if (typeof data === 'string') {
+                details = data;
+              } else if (data && typeof data === 'object') {
+                details = Object.entries(data)
+                  .map(([key, value]) => `${key}: ${String(value)}`)
+                  .join(' | ');
+              }
+            }
+            toast({
+              title: 'Уведомление не отправлено',
+              description: details || 'Не удалось отправить уведомление о подписке',
+              variant: 'destructive',
+            });
+          }
+        }
+      }
       logRecentAction({
         entityType: 'subscription',
         entityId: deleteId,
@@ -119,11 +157,56 @@ const SubscriptionsPage: React.FC = () => {
     if (selectedIds.length === 0) return;
     setIsBulkDeleting(true);
     try {
-      const targets = selectedIds.map((id) => ({
-        id,
-        name: `Подписка #${id}`,
-      }));
+      const targets = selectedIds.map((id) => {
+        const sub = data.find((item) => String(item.id) === id);
+        return {
+          id,
+          name: `Подписка #${id}`,
+          sub,
+        };
+      });
       await Promise.all(selectedIds.map((id) => subscriptionsApi.delete(id)));
+      const notifications = targets
+        .map((target) => {
+          if (!target.sub) return null;
+          const userId = getRefId(target.sub.user);
+          const botId = getRefId(target.sub.bot);
+          const planId = getRefId(target.sub.plan);
+          if (!userId || !botId || !planId) return null;
+          return apiClient.post('/send_purchase_notification/', {
+            user_id: userId,
+            bot_id: botId,
+            plan_id: planId,
+            language: getUserLanguage(userId),
+            message_identifier: 'subscription_expired',
+          });
+        })
+        .filter(Boolean) as Array<Promise<unknown>>;
+      if (notifications.length) {
+        try {
+          await Promise.all(notifications);
+        } catch (error) {
+          let details = '';
+          if (axios.isAxiosError(error)) {
+            const data = error.response?.data as
+              | Record<string, unknown>
+              | string
+              | undefined;
+            if (typeof data === 'string') {
+              details = data;
+            } else if (data && typeof data === 'object') {
+              details = Object.entries(data)
+                .map(([key, value]) => `${key}: ${String(value)}`)
+                .join(' | ');
+            }
+          }
+          toast({
+            title: 'Уведомления не отправлены',
+            description: details || 'Не удалось отправить уведомления о подписках',
+            variant: 'destructive',
+          });
+        }
+      }
       targets.forEach((target) =>
         logRecentAction({
           entityType: 'subscription',
@@ -153,6 +236,16 @@ const SubscriptionsPage: React.FC = () => {
     if (typeof value.telegram_id === 'number') return value.telegram_id;
     if (typeof value.id === 'number') return value.id;
     return null;
+  };
+
+  const getUserLanguage = (userId: number | null) => {
+    if (!userId) return 'ru';
+    const user = users.find(
+      (item) =>
+        Number(item.telegram_id) === userId ||
+        (typeof item.id === 'number' && Number(item.id) === userId)
+    );
+    return user?.language || 'ru';
   };
 
   const getRefLabel = (value: SubscriptionRef): string => {
