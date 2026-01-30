@@ -127,9 +127,23 @@ const SubscriptionFormPage: React.FC = () => {
         id: Number(plan.id),
         label: `${plan.name} (${plan.duration_days} дн.)`,
         duration: plan.duration_days,
+        name: plan.name,
       })),
     [plans]
   );
+
+  const isLifetimePlan = useMemo(() => {
+    const plan = planOptions.find((option) => option.id === selectedPlan);
+    if (!plan) return false;
+    const duration = Number(plan.duration);
+    const name = String(plan.name || '').toLowerCase();
+    return (
+      duration === 0 ||
+      name.includes('навсегда') ||
+      name.includes('forever') ||
+      name.includes('lifetime')
+    );
+  }, [planOptions, selectedPlan]);
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -188,6 +202,16 @@ const SubscriptionFormPage: React.FC = () => {
     loadSubscription();
   }, [id, navigate, setValue, toast]);
 
+  useEffect(() => {
+    if (!isLifetimePlan) return;
+    const today = new Date();
+    const todayDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(
+      today.getDate()
+    )}`;
+    setValue('start_date', todayDate);
+    setValue('end_date', '');
+  }, [isLifetimePlan, setValue]);
+
   const pad = (value: number) => String(value).padStart(2, '0');
 
   const getCurrentTimeString = () => {
@@ -209,13 +233,20 @@ const SubscriptionFormPage: React.FC = () => {
     setIsLoading(true);
     try {
       const currentTime = getCurrentTimeString();
-      const startAt = buildDateTimeString(data.start_date, currentTime);
+      let startAt = buildDateTimeString(data.start_date, currentTime);
       let endAt =
         data.end_date
           ? buildDateTimeString(data.end_date, currentTime)
           : null;
 
-      if (!endAt) {
+      if (isLifetimePlan) {
+        const today = new Date();
+        const todayDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(
+          today.getDate()
+        )}`;
+        startAt = buildDateTimeString(todayDate, currentTime);
+        endAt = null;
+      } else if (!endAt) {
         const duration =
           planOptions.find((option) => option.id === data.plan)?.duration ?? null;
         const startDate = buildDateTimeObject(data.start_date, currentTime);
@@ -230,9 +261,11 @@ const SubscriptionFormPage: React.FC = () => {
         bot: data.bot,
         plan: data.plan,
         start_date: startAt,
-        end_date: endAt,
         is_active: data.is_active,
       };
+      if (!isLifetimePlan) {
+        payload.end_date = endAt;
+      }
 
       if (isEdit) {
         const updated = await subscriptionsApi.update(id!, payload);
@@ -418,7 +451,7 @@ const SubscriptionFormPage: React.FC = () => {
                   id="start_date"
                   type="date"
                   {...register('start_date')}
-                  disabled={isLoading}
+                  disabled={isLoading || isLifetimePlan}
                 />
                 {errors.start_date && (
                   <p className="text-sm text-destructive">{errors.start_date.message}</p>
@@ -430,7 +463,7 @@ const SubscriptionFormPage: React.FC = () => {
                   id="end_date"
                   type="date"
                   {...register('end_date')}
-                  disabled={isLoading}
+                  disabled={isLoading || isLifetimePlan}
                 />
               </div>
             </div>
