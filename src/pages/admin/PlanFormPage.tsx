@@ -31,13 +31,23 @@ const numberFromInput = (message: string) =>
     z.number({ required_error: message }).int('Только целое число')
   );
 
+const optionalNumberFromInput = () =>
+  z.preprocess(
+    (val) => {
+      if (val === '' || val === null || typeof val === 'undefined') return undefined;
+      if (typeof val === 'string' && val.trim() === '') return undefined;
+      return Number(val);
+    },
+    z.number().int('Только целое число').optional()
+  );
+
 const planSchema = z.object({
   bot: z.preprocess(
     (val) => Number(val),
     z.number({ required_error: 'Выберите бота' }).int('Только целое число')
   ),
   name: z.string().min(1, 'Введите название').max(100),
-  duration_days: numberFromInput('Введите длительность'),
+  duration_days: optionalNumberFromInput(),
   price_usdt: z.string().min(1, 'Введите цену в USDT'),
   price_uzs: z.string().min(1, 'Введите цену в UZS'),
   price_stars: z.string().min(1, 'Введите цену в STARS'),
@@ -130,16 +140,18 @@ const PlanFormPage: React.FC = () => {
   const onSubmit = async (data: PlanFormData) => {
     setIsLoading(true);
     try {
-      const payload: Omit<SubscriptionPlan, 'id' | 'created_at'> = {
+      const payload = {
         bot: data.bot,
         name: data.name,
-        duration_days: data.duration_days,
         price_usdt: data.price_usdt,
         price_uzs: data.price_uzs,
         price_stars: data.price_stars,
         price_rub: data.price_rub,
         is_active: data.is_active,
-      };
+        ...(typeof data.duration_days === 'number'
+          ? { duration_days: data.duration_days }
+          : {}),
+      } as Omit<SubscriptionPlan, 'id' | 'created_at'>;
       if (isEdit) {
         const updated = await plansApi.update(id!, payload);
         logRecentAction({
