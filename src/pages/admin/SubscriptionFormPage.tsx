@@ -57,6 +57,7 @@ const SubscriptionFormPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
+  const [manualUserId, setManualUserId] = useState('');
   const [bots, setBots] = useState<Bot[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const isEdit = !!id;
@@ -112,6 +113,23 @@ const SubscriptionFormPage: React.FC = () => {
       })),
     [users]
   );
+
+  const manualUserOption = useMemo(() => {
+    const trimmed = manualUserId.trim();
+    if (!trimmed) return null;
+    const id = Number(trimmed);
+    if (!Number.isFinite(id) || id <= 0) return null;
+    const exists = users.some(
+      (user) => Number(user.telegram_id) === id || Number(user.id) === id
+    );
+    if (exists) return null;
+    return { id, label: `${id} (ru)` };
+  }, [manualUserId, users]);
+
+  const combinedUserOptions = useMemo(() => {
+    if (!manualUserOption) return userOptions;
+    return [manualUserOption, ...userOptions];
+  }, [manualUserOption, userOptions]);
 
   const botOptions = useMemo(
     () =>
@@ -199,6 +217,17 @@ const SubscriptionFormPage: React.FC = () => {
     loadSubscription();
   }, [id, navigate, setValue, toast]);
 
+  useEffect(() => {
+    if (!selectedUser) return;
+    const exists = users.some(
+      (user) =>
+        Number(user.telegram_id) === selectedUser || Number(user.id) === selectedUser
+    );
+    if (!exists) {
+      setManualUserId(String(selectedUser));
+    }
+  }, [selectedUser, users]);
+
   const pad = (value: number) => String(value).padStart(2, '0');
 
   const getCurrentTimeString = () => {
@@ -216,9 +245,23 @@ const SubscriptionFormPage: React.FC = () => {
       date.getHours()
     )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 
+  const ensureUserExists = async (userId: number) => {
+    const exists = users.some(
+      (user) => Number(user.telegram_id) === userId || Number(user.id) === userId
+    );
+    if (exists) return;
+    const created = await usersApi.create({
+      telegram_id: userId,
+      language: 'ru',
+      is_active: true,
+    });
+    setUsers((prev) => [created, ...prev]);
+  };
+
   const onSubmit = async (data: SubscriptionFormData) => {
     setIsLoading(true);
     try {
+      await ensureUserExists(data.user);
       const currentTime = getCurrentTimeString();
       const today = new Date();
       const todayDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(
@@ -373,14 +416,17 @@ const SubscriptionFormPage: React.FC = () => {
               <Label htmlFor="user">User</Label>
               <Select
                 value={selectedUser ? String(selectedUser) : ''}
-                onValueChange={(value) => setValue('user', Number(value))}
+                onValueChange={(value) => {
+                  setValue('user', Number(value));
+                  setManualUserId('');
+                }}
                 disabled={isLoading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Выберите пользователя" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover">
-                  {userOptions.map((option) => (
+                  {combinedUserOptions.map((option) => (
                     <SelectItem key={option.id} value={String(option.id)}>
                       {option.label}
                     </SelectItem>
@@ -390,6 +436,27 @@ const SubscriptionFormPage: React.FC = () => {
               {errors.user && (
                 <p className="text-sm text-destructive">{errors.user.message as string}</p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="manual_user_id">User ID (вручную)</Label>
+              <Input
+                id="manual_user_id"
+                inputMode="numeric"
+                placeholder="Введите Telegram ID"
+                value={manualUserId}
+                onChange={(event) => {
+                  const onlyDigits = event.target.value.replace(/\D/g, '');
+                  setManualUserId(onlyDigits);
+                  if (onlyDigits) {
+                    setValue('user', Number(onlyDigits), { shouldValidate: true });
+                  }
+                }}
+                disabled={isLoading}
+              />
+              <p className="text-xs text-muted-foreground">
+                Если пользователя нет в списке, он будет создан с языком RU.
+              </p>
             </div>
 
             <div className="space-y-2">
