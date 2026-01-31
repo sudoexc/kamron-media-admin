@@ -23,12 +23,32 @@ const numberFromInput = (message: string) =>
     z.number({ required_error: message }).int('Только целое число')
   );
 
+const optionalNumberFromInput = () =>
+  z.preprocess(
+    (val) => {
+      if (val === '' || val === null || typeof val === 'undefined') return undefined;
+      if (typeof val === 'string' && val.trim() === '') return undefined;
+      return Number(val);
+    },
+    z.number().int('Только целое число').optional()
+  );
+
+const optionalStringFromInput = () =>
+  z.preprocess(
+    (val) => {
+      if (val === '' || val === null || typeof val === 'undefined') return undefined;
+      if (typeof val === 'string' && val.trim() === '') return undefined;
+      return val;
+    },
+    z.string().min(1, 'Введите токен бота').optional()
+  );
+
 const botSchema = z.object({
   title: z.string().min(1, 'Введите название').max(100),
   username: z.string().min(1, 'Введите username').max(50),
-  notification_group_id: numberFromInput('Введите ID группы'),
-  bot_token: z.string().min(1, 'Введите токен бота'),
-  request_port: numberFromInput('Введите порт'),
+  notification_group_id: optionalNumberFromInput(),
+  bot_token: optionalStringFromInput(),
+  request_port: optionalNumberFromInput(),
 });
 
 type BotFormData = z.infer<typeof botSchema>;
@@ -63,7 +83,7 @@ const BotFormPage: React.FC = () => {
           if (bot) {
             setValue('title', bot.title);
             setValue('username', bot.username);
-            setValue('notification_group_id', bot.notification_group_id);
+            setValue('notification_group_id', bot.notification_group_id ?? undefined);
             setValue('bot_token', bot.bot_token);
             setValue('request_port', bot.request_port ?? undefined);
           }
@@ -85,8 +105,21 @@ const BotFormPage: React.FC = () => {
   const onSubmit = async (data: BotFormData) => {
     setIsLoading(true);
     try {
+      const payload: Pick<Bot, 'title' | 'username'> & Partial<Bot> = {
+        title: data.title,
+        username: data.username,
+      };
+      if (typeof data.bot_token === 'string' && data.bot_token.trim() !== '') {
+        payload.bot_token = data.bot_token;
+      }
+      if (typeof data.notification_group_id === 'number') {
+        payload.notification_group_id = data.notification_group_id;
+      }
+      if (typeof data.request_port === 'number') {
+        payload.request_port = data.request_port;
+      }
       if (isEdit) {
-        const updated = await botsApi.update(id!, data);
+        const updated = await botsApi.update(id!, payload);
         logRecentAction({
           entityType: 'bot',
           entityId: String(updated.id),
@@ -95,7 +128,7 @@ const BotFormPage: React.FC = () => {
         });
         toast({ title: 'Успешно', description: 'Бот обновлён' });
       } else {
-        const created = await botsApi.create(data as Omit<Bot, 'id' | 'created_at'>);
+        const created = await botsApi.create(payload as Omit<Bot, 'id' | 'created_at'>);
         logRecentAction({
           entityType: 'bot',
           entityId: String(created.id),
@@ -206,7 +239,6 @@ const BotFormPage: React.FC = () => {
               <Input
                 id="request_port"
                 type="number"
-                placeholder="5670"
                 {...register('request_port')}
                 disabled={isLoading}
               />

@@ -57,7 +57,7 @@ const SubscriptionFormPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
   const [users, setUsers] = useState<User[]>([]);
-  const [manualUserId, setManualUserId] = useState('');
+  const [userSearch, setUserSearch] = useState('');
   const [bots, setBots] = useState<Bot[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const isEdit = !!id;
@@ -114,22 +114,54 @@ const SubscriptionFormPage: React.FC = () => {
     [users]
   );
 
-  const manualUserOption = useMemo(() => {
-    const trimmed = manualUserId.trim();
-    if (!trimmed) return null;
-    const id = Number(trimmed);
-    if (!Number.isFinite(id) || id <= 0) return null;
-    const exists = users.some(
-      (user) => Number(user.telegram_id) === id || Number(user.id) === id
-    );
+  const selectedUserOption = useMemo(() => {
+    if (!selectedUser) return null;
+    const exists = userOptions.some((option) => option.id === selectedUser);
     if (exists) return null;
-    return { id, label: `${id} (ru)` };
-  }, [manualUserId, users]);
+    return { id: selectedUser, label: `${selectedUser} (ru)` };
+  }, [selectedUser, userOptions]);
+
+  const filteredUserOptions = useMemo(() => {
+    if (!userSearch) return userOptions;
+    return userOptions.filter((option) =>
+      String(option.id).includes(userSearch)
+    );
+  }, [userOptions, userSearch]);
+
+  const manualUserOption = useMemo(() => {
+    if (!userSearch) return null;
+    const id = Number(userSearch);
+    if (!Number.isFinite(id) || id <= 0) return null;
+    const exists = userOptions.some((option) => option.id === id);
+    if (exists) return null;
+    return { id, label: `Новый: ${id} (ru)` };
+  }, [userSearch, userOptions]);
 
   const combinedUserOptions = useMemo(() => {
-    if (!manualUserOption) return userOptions;
-    return [manualUserOption, ...userOptions];
-  }, [manualUserOption, userOptions]);
+    const options: Array<{ id: number; label: string }> = [];
+    if (manualUserOption) options.push(manualUserOption);
+    if (
+      selectedUserOption &&
+      (!manualUserOption || manualUserOption.id !== selectedUserOption.id)
+    ) {
+      options.push(selectedUserOption);
+    }
+    const baseOptions = userSearch ? filteredUserOptions : userOptions;
+    const seen = new Set(options.map((option) => option.id));
+    baseOptions.forEach((option) => {
+      if (!seen.has(option.id)) {
+        options.push(option);
+        seen.add(option.id);
+      }
+    });
+    return options;
+  }, [
+    manualUserOption,
+    selectedUserOption,
+    userSearch,
+    filteredUserOptions,
+    userOptions,
+  ]);
 
   const botOptions = useMemo(
     () =>
@@ -216,17 +248,6 @@ const SubscriptionFormPage: React.FC = () => {
     loadOptions();
     loadSubscription();
   }, [id, navigate, setValue, toast]);
-
-  useEffect(() => {
-    if (!selectedUser) return;
-    const exists = users.some(
-      (user) =>
-        Number(user.telegram_id) === selectedUser || Number(user.id) === selectedUser
-    );
-    if (!exists) {
-      setManualUserId(String(selectedUser));
-    }
-  }, [selectedUser, users]);
 
   const pad = (value: number) => String(value).padStart(2, '0');
 
@@ -418,7 +439,7 @@ const SubscriptionFormPage: React.FC = () => {
                 value={selectedUser ? String(selectedUser) : ''}
                 onValueChange={(value) => {
                   setValue('user', Number(value));
-                  setManualUserId('');
+                  setUserSearch('');
                 }}
                 disabled={isLoading}
               >
@@ -426,37 +447,43 @@ const SubscriptionFormPage: React.FC = () => {
                   <SelectValue placeholder="Выберите пользователя" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover">
-                  {combinedUserOptions.map((option) => (
-                    <SelectItem key={option.id} value={String(option.id)}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
+                  <div className="p-2 pb-1">
+                    <Input
+                      value={userSearch}
+                      onChange={(event) => {
+                        const onlyDigits = event.target.value.replace(/\D/g, '');
+                        setUserSearch(onlyDigits);
+                      }}
+                      placeholder="Введите Telegram ID"
+                      inputMode="numeric"
+                      className="h-8"
+                      onKeyDown={(event) => {
+                        event.stopPropagation();
+                        if (event.key === 'Enter' && manualUserOption) {
+                          event.preventDefault();
+                          setValue('user', manualUserOption.id, { shouldValidate: true });
+                          setUserSearch('');
+                        }
+                      }}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    />
+                  </div>
+                  {combinedUserOptions.length > 0 ? (
+                    combinedUserOptions.map((option) => (
+                      <SelectItem key={option.id} value={String(option.id)}>
+                        {option.label}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      Ничего не найдено
+                    </div>
+                  )}
                 </SelectContent>
               </Select>
               {errors.user && (
                 <p className="text-sm text-destructive">{errors.user.message as string}</p>
               )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="manual_user_id">User ID (вручную)</Label>
-              <Input
-                id="manual_user_id"
-                inputMode="numeric"
-                placeholder="Введите Telegram ID"
-                value={manualUserId}
-                onChange={(event) => {
-                  const onlyDigits = event.target.value.replace(/\D/g, '');
-                  setManualUserId(onlyDigits);
-                  if (onlyDigits) {
-                    setValue('user', Number(onlyDigits), { shouldValidate: true });
-                  }
-                }}
-                disabled={isLoading}
-              />
-              <p className="text-xs text-muted-foreground">
-                Если пользователя нет в списке, он будет создан с языком RU.
-              </p>
             </div>
 
             <div className="space-y-2">
