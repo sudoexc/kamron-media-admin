@@ -23,6 +23,14 @@ export interface SubscriptionPlan {
   created_at?: string;
 }
 
+export interface BotPlanLink {
+  id?: string | number;
+  bot_id: number;
+  plan_id: number;
+  plan?: SubscriptionPlan | number;
+  created_at?: string;
+}
+
 export interface Payment {
   id: string | number;
   user: User | number;

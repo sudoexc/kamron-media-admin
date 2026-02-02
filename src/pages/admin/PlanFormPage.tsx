@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,16 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Loader2, ArrowLeft } from 'lucide-react';
-import { plansApi, botsApi } from '@/api/entities';
-import { Bot, SubscriptionPlan } from '@/types/entities';
+import { plansApi } from '@/api/entities';
+import { SubscriptionPlan } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
 import { logRecentAction } from '@/lib/recent-actions';
 
@@ -42,10 +35,6 @@ const optionalNumberFromInput = () =>
   );
 
 const planSchema = z.object({
-  bot: z.preprocess(
-    (val) => Number(val),
-    z.number({ required_error: 'Выберите бота' }).int('Только целое число')
-  ),
   name: z.string().min(1, 'Введите название').max(100),
   duration_days: optionalNumberFromInput(),
   price_usdt: z.string().min(1, 'Введите цену в USDT'),
@@ -63,7 +52,6 @@ const PlanFormPage: React.FC = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(!!id);
-  const [bots, setBots] = useState<Bot[]>([]);
   const isEdit = !!id;
 
   const {
@@ -75,7 +63,6 @@ const PlanFormPage: React.FC = () => {
   } = useForm<PlanFormData>({
     resolver: zodResolver(planSchema),
     defaultValues: {
-      bot: 0,
       name: '',
       price_usdt: '',
       price_uzs: '',
@@ -86,34 +73,13 @@ const PlanFormPage: React.FC = () => {
   });
 
   const isActive = watch('is_active');
-  const selectedBot = watch('bot');
-
-  const botOptions = useMemo(
-    () =>
-      bots.map((bot) => ({
-        id: Number(bot.id),
-        label: `${bot.title} (${bot.username})`,
-      })),
-    [bots]
-  );
 
   useEffect(() => {
-    const loadBots = async () => {
-      try {
-        const botsResponse = await botsApi.getAll();
-        setBots(botsResponse);
-      } catch {
-        setBots([]);
-      }
-    };
-    loadBots();
-
     if (id) {
       const fetchPlan = async () => {
         try {
           const plan = await plansApi.getById(id);
           if (plan) {
-            setValue('bot', plan.bot);
             setValue('name', plan.name);
             setValue('duration_days', plan.duration_days);
             setValue('price_usdt', plan.price_usdt);
@@ -141,7 +107,6 @@ const PlanFormPage: React.FC = () => {
     setIsLoading(true);
     try {
       const payload = {
-        bot: data.bot,
         name: data.name,
         price_usdt: data.price_usdt,
         price_uzs: data.price_uzs,
@@ -217,31 +182,6 @@ const PlanFormPage: React.FC = () => {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="bot">Bot</Label>
-              <Select
-                value={selectedBot ? String(selectedBot) : ''}
-                onValueChange={(value) => setValue('bot', Number(value))}
-                disabled={isLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите бота" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover">
-                  {botOptions.map((bot) => (
-                    <SelectItem key={bot.id} value={String(bot.id)}>
-                      {bot.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.bot && (
-                <p className="text-sm text-destructive">
-                  {errors.bot.message as string}
-                </p>
-              )}
-            </div>
-
             <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input

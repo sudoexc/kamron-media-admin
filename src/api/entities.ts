@@ -273,6 +273,42 @@ export const plansApi = {
     }),
 };
 
+export const botPlansApi = {
+  getByBotId: (botId: string | number) =>
+    apiClient
+      .get<unknown>('/bot-plans/', {
+        params: { bot_id: botId },
+      })
+      .then((r) => r.data)
+      .catch(() =>
+        apiClient
+          .get<unknown>('/bot_plans/', {
+            params: { bot_id: botId },
+          })
+          .then((r) => r.data)
+      ),
+  delete: (id: string | number) =>
+    apiClient
+      .delete(`/bot-plans/${id}/`)
+      .then(() => undefined)
+      .catch(() => apiClient.delete(`/bot_plans/${id}/`).then(() => undefined)),
+  bulkCreate: (botId: string | number, planIds: number[]) =>
+    apiClient
+      .post('/bot-plans/bulk_create/', {
+        bot_id: Number(botId),
+        plans: planIds.map((plan_id) => ({ plan_id })),
+      })
+      .then((r) => r.data)
+      .catch(() =>
+        apiClient
+          .post('/bot_plans/bulk_create/', {
+            bot_id: Number(botId),
+            plans: planIds.map((plan_id) => ({ plan_id })),
+          })
+          .then((r) => r.data)
+      ),
+};
+
 export const paymentsApi = {
   getAll: (params?: {
     page?: number;

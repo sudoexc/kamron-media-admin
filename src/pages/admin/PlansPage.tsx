@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,8 @@ import { DataTablePagination } from '@/components/table/DataTablePagination';
 import { DataTableActions } from '@/components/table/DataTableActions';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { plansApi, botsApi } from '@/api/entities';
-import { SubscriptionPlan, Bot } from '@/types/entities';
+import { plansApi } from '@/api/entities';
+import { SubscriptionPlan } from '@/types/entities';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -20,7 +20,6 @@ const PlansPage: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [data, setData] = useState<SubscriptionPlan[]>([]);
-  const [bots, setBots] = useState<Bot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -34,10 +33,7 @@ const PlansPage: React.FC = () => {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [plansResponse, botsResponse] = await Promise.all([
-        plansApi.getAll(),
-        botsApi.getAll(),
-      ]);
+      const [plansResponse] = await Promise.all([plansApi.getAll()]);
       const sortedPlans = [...plansResponse].sort((a, b) => {
         const aTime = a.created_at ? Date.parse(a.created_at) : NaN;
         const bTime = b.created_at ? Date.parse(b.created_at) : NaN;
@@ -52,7 +48,6 @@ const PlansPage: React.FC = () => {
         return String(b.id).localeCompare(String(a.id));
       });
       setData(sortedPlans);
-      setBots(botsResponse);
     } catch (error) {
       toast({
         title: 'Ошибка',
@@ -144,18 +139,11 @@ const PlansPage: React.FC = () => {
     return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(parsed);
   };
 
-  const botsMap = useMemo(() => {
-    const map = new Map<number, string>();
-    bots.forEach((bot) => map.set(Number(bot.id), bot.title));
-    return map;
-  }, [bots]);
-
   const filtered = data.filter((plan) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
       plan.name.toLowerCase().includes(q) ||
-      String(plan.bot).includes(q) ||
       String(plan.duration_days).includes(q)
     );
   });
@@ -177,11 +165,6 @@ const PlansPage: React.FC = () => {
       cell: (plan: SubscriptionPlan) => (
         <p className="font-medium">{plan.name}</p>
       ),
-    },
-    {
-      key: 'bot',
-      header: 'Бот',
-      cell: (plan: SubscriptionPlan) => botsMap.get(plan.bot) || `ID ${plan.bot}`,
     },
     {
       key: 'prices',
@@ -259,7 +242,7 @@ const PlansPage: React.FC = () => {
                 setSearch(value);
                 setPage(1);
               }}
-              placeholder="Поиск по названию или ID бота..."
+              placeholder="Поиск по названию или длительности..."
               showFilterButton={false}
             />
           </div>
