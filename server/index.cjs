@@ -7,6 +7,9 @@ const { URL } = require('url');
 
 const port = Number(process.env.PORT || 8081);
 const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
+const botServerIp = process.env.BOT_SERVER_IP || '95.179.139.3';
+const backendUsername = process.env.BACKEND_USERNAME || 'admin';
+const backendPassword = process.env.BACKEND_PASSWORD || 'adminZzzXxxCcc';
 const distDir = path.join(__dirname, '..', 'dist');
 
 // Where to persist snapshots
@@ -34,12 +37,12 @@ const saveSnapshots = (snapshots) => {
   fs.writeFileSync(snapshotsFile, JSON.stringify(snapshots, null, 2), 'utf8');
 };
 
-// ─── HTTP helper ──────────────────────────────────────────────────────────────
+// ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
-const httpGet = (url) => new Promise((resolve, reject) => {
+const httpGet = (url, headers = {}) => new Promise((resolve, reject) => {
   const isHttps = url.startsWith('https');
   const fn = isHttps ? https.get : http.get;
-  fn(url, (res) => {
+  fn(url, { headers }, (res) => {
     let raw = '';
     res.on('data', (chunk) => { raw += chunk; });
     res.on('end', () => {
@@ -49,11 +52,55 @@ const httpGet = (url) => new Promise((resolve, reject) => {
   }).on('error', reject);
 });
 
+const httpPost = (url, body) => new Promise((resolve, reject) => {
+  const payload = JSON.stringify(body);
+  const parsed = new URL(url);
+  const isHttps = parsed.protocol === 'https:';
+  const fn = isHttps ? https.request : http.request;
+  const req = fn({
+    hostname: parsed.hostname,
+    port: parsed.port || (isHttps ? 443 : 80),
+    path: parsed.pathname,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+  }, (res) => {
+    let raw = '';
+    res.on('data', (c) => { raw += c; });
+    res.on('end', () => {
+      try { resolve(JSON.parse(raw)); }
+      catch (e) { reject(new Error(`JSON parse error: ${e.message}`)); }
+    });
+  });
+  req.on('error', reject);
+  req.write(payload);
+  req.end();
+});
+
+// ─── Auth token ───────────────────────────────────────────────────────────────
+
+let cachedToken = null;
+
+const getAuthToken = async () => {
+  try {
+    const data = await httpPost(`${backendUrl}/api/token/`, {
+      username: backendUsername,
+      password: backendPassword,
+    });
+    cachedToken = data.access;
+    return cachedToken;
+  } catch (e) {
+    console.error('[stats] Failed to get auth token:', e.message);
+    return null;
+  }
+};
+
 // ─── Fetch bots list from backend ────────────────────────────────────────────
 
 const fetchBots = async () => {
   try {
-    const data = await httpGet(`${backendUrl}/bots/`);
+    const token = await getAuthToken();
+    if (!token) return [];
+    const data = await httpGet(`${backendUrl}/api/bots/`, { Authorization: `Bearer ${token}` });
     const list = Array.isArray(data) ? data : (data.results || data.data || []);
     return list.filter((b) => b.request_port);
   } catch (e) {
@@ -66,7 +113,7 @@ const fetchBots = async () => {
 
 const fetchBotStats = async (botPort) => {
   try {
-    const data = await httpGet(`http://127.0.0.1:${botPort}/v1/stats`);
+    const data = await httpGet(`http://${botServerIp}:${botPort}/v1/stats`);
     if (!data.ok) return null;
     return data;
   } catch (e) {
