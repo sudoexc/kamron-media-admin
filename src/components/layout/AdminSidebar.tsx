@@ -9,6 +9,7 @@ import {
   Wallet,
   Shield,
   BarChart3,
+  TrendingUp,
   Package,
   Receipt,
   ChevronLeft,
@@ -116,6 +117,12 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ collapsed, onToggle 
             to="/admin/analytics/subscriptions-report"
             icon={BarChart3}
             label="Отчёт по подпискам"
+            collapsed={collapsed}
+          />
+          <SidebarNavItem
+            to="/admin/analytics/statistics"
+            icon={TrendingUp}
+            label="Статистика роста"
             collapsed={collapsed}
           />
         </SidebarNavGroup>

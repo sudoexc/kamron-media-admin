@@ -25,6 +25,7 @@ import PaymentMethodsPage from "./pages/admin/PaymentMethodsPage";
 import PaymentMethodFormPage from "./pages/admin/PaymentMethodFormPage";
 import SubscriptionsReportPage from "./pages/admin/SubscriptionsReportPage";
 import SubscriptionFormPage from "./pages/admin/SubscriptionFormPage";
+import StatisticsPage from "./pages/admin/StatisticsPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -81,6 +82,7 @@ const App = () => (
                 <Route path="payment-methods/:id/edit" element={<PaymentMethodFormPage />} />
                 
                 <Route path="analytics/subscriptions-report" element={<SubscriptionsReportPage />} />
+                <Route path="analytics/statistics" element={<StatisticsPage />} />
               </Route>
               
               <Route path="*" element={<NotFound />} />
