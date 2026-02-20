@@ -9,14 +9,11 @@ const port = Number(process.env.PORT || 8081);
 const backendUrl = process.env.BACKEND_URL || 'http://127.0.0.1:8000';
 const distDir = path.join(__dirname, '..', 'dist');
 
-// URL of Kamron's stats API, e.g. https://api.example.com/v1/stats
-const statsSourceUrl = process.env.STATS_SOURCE_URL || '';
-
 // Where to persist snapshots
 const dataDir = path.join(__dirname, 'data');
 const snapshotsFile = path.join(dataDir, 'statistics.json');
 
-// ─── Snapshot storage ────────────────────────────────────────────────────────
+// ─── Snapshot storage ─────────────────────────────────────────────────────────
 
 const ensureDataDir = () => {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
@@ -37,79 +34,147 @@ const saveSnapshots = (snapshots) => {
   fs.writeFileSync(snapshotsFile, JSON.stringify(snapshots, null, 2), 'utf8');
 };
 
-// ─── Fetch & store stats ──────────────────────────────────────────────────────
+// ─── HTTP helper ──────────────────────────────────────────────────────────────
 
-const fetchAndStoreStats = () => {
-  if (!statsSourceUrl) {
-    console.warn('[stats] STATS_SOURCE_URL not set, skipping fetch');
-    return;
-  }
-
-  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  const isHttps = statsSourceUrl.startsWith('https');
-  const requestFn = isHttps ? https.get : http.get;
-
-  console.log(`[stats] Fetching stats from ${statsSourceUrl}`);
-
-  requestFn(statsSourceUrl, (res) => {
+const httpGet = (url) => new Promise((resolve, reject) => {
+  const isHttps = url.startsWith('https');
+  const fn = isHttps ? https.get : http.get;
+  fn(url, (res) => {
     let raw = '';
     res.on('data', (chunk) => { raw += chunk; });
     res.on('end', () => {
-      try {
-        const snapshot = JSON.parse(raw);
-        if (!snapshot.ok) {
-          console.warn('[stats] Response ok=false, skipping save');
-          return;
-        }
-        snapshot.date = today;
-
-        const snapshots = loadSnapshots();
-        // Replace if same date already exists, otherwise append
-        const idx = snapshots.findIndex((s) => s.date === today);
-        if (idx >= 0) {
-          snapshots[idx] = snapshot;
-        } else {
-          snapshots.push(snapshot);
-        }
-        // Keep last 400 days max
-        if (snapshots.length > 400) snapshots.splice(0, snapshots.length - 400);
-        saveSnapshots(snapshots);
-        console.log(`[stats] Saved snapshot for ${today} (total=${snapshot.total})`);
-      } catch (e) {
-        console.error('[stats] Failed to parse response:', e.message);
-      }
+      try { resolve(JSON.parse(raw)); }
+      catch (e) { reject(new Error(`JSON parse error: ${e.message}`)); }
     });
-  }).on('error', (e) => {
-    console.error('[stats] Fetch error:', e.message);
-  });
+  }).on('error', reject);
+});
+
+// ─── Fetch bots list from backend ────────────────────────────────────────────
+
+const fetchBots = async () => {
+  try {
+    const data = await httpGet(`${backendUrl}/bots/`);
+    const list = Array.isArray(data) ? data : (data.results || data.data || []);
+    return list.filter((b) => b.request_port);
+  } catch (e) {
+    console.error('[stats] Failed to fetch bots:', e.message);
+    return [];
+  }
 };
 
-// ─── Cron: run daily at 04:55 Tashkent (= 23:55 UTC) ─────────────────────────
+// ─── Fetch stats from a single bot port ──────────────────────────────────────
+
+const fetchBotStats = async (botPort) => {
+  try {
+    const data = await httpGet(`http://127.0.0.1:${botPort}/v1/stats`);
+    if (!data.ok) return null;
+    return data;
+  } catch (e) {
+    console.error(`[stats] Failed to fetch stats from port ${botPort}:`, e.message);
+    return null;
+  }
+};
+
+// ─── Aggregate stats across all bots ─────────────────────────────────────────
+
+const aggregateStats = (results) => {
+  // results: array of { bot, stats }
+  const sumLang = (field) => ({
+    count: results.reduce((s, r) => s + (r.stats[field]?.count || 0), 0),
+    ru:    results.reduce((s, r) => s + (r.stats[field]?.ru    || 0), 0),
+    en:    results.reduce((s, r) => s + (r.stats[field]?.en    || 0), 0),
+    uz__lotin:  results.reduce((s, r) => s + (r.stats[field]?.uz__lotin  || 0), 0),
+    uz__kiril:  results.reduce((s, r) => s + (r.stats[field]?.uz__kiril  || 0), 0),
+  });
+
+  return {
+    ok: true,
+    total:         results.reduce((s, r) => s + (r.stats.total         || 0), 0),
+    new_users:     results.reduce((s, r) => s + (r.stats.new_users     || 0), 0),
+    new_groups:    results.reduce((s, r) => s + (r.stats.new_groups    || 0), 0),
+    premium_users: results.reduce((s, r) => s + (r.stats.premium_users || 0), 0),
+    unique_groups: results.reduce((s, r) => s + (r.stats.unique_groups || 0), 0),
+    blocked_users: results.reduce((s, r) => s + (r.stats.blocked_users || 0), 0),
+    downloads:     results.reduce((s, r) => s + (r.stats.downloads     || 0), 0),
+    users:         sumLang('users'),
+    groups:        sumLang('groups'),
+    unique_users:  sumLang('unique_users'),
+    timestamp: Math.floor(Date.now() / 1000),
+    // per-bot breakdown (stored for future use)
+    bots: results.map((r) => ({
+      id: r.bot.id,
+      title: r.bot.title || r.bot.username,
+      port: r.bot.request_port,
+      stats: r.stats,
+    })),
+  };
+};
+
+// ─── Main fetch & store ───────────────────────────────────────────────────────
+
+const fetchAndStoreStats = async () => {
+  console.log('[stats] Starting stats collection...');
+  const today = new Date().toISOString().slice(0, 10);
+
+  const bots = await fetchBots();
+  if (bots.length === 0) {
+    console.warn('[stats] No bots found, skipping');
+    return;
+  }
+  console.log(`[stats] Found ${bots.length} bots`);
+
+  const results = [];
+  for (const bot of bots) {
+    const stats = await fetchBotStats(bot.request_port);
+    if (stats) {
+      results.push({ bot, stats });
+      console.log(`[stats] Bot ${bot.title || bot.id} (port ${bot.request_port}): total=${stats.total}`);
+    }
+  }
+
+  if (results.length === 0) {
+    console.warn('[stats] No stats collected');
+    return;
+  }
+
+  const snapshot = aggregateStats(results);
+  snapshot.date = today;
+
+  const snapshots = loadSnapshots();
+  const idx = snapshots.findIndex((s) => s.date === today);
+  if (idx >= 0) {
+    snapshots[idx] = snapshot;
+  } else {
+    snapshots.push(snapshot);
+  }
+  // Keep last 400 days
+  if (snapshots.length > 400) snapshots.splice(0, snapshots.length - 400);
+  saveSnapshots(snapshots);
+  console.log(`[stats] Saved snapshot for ${today}: total=${snapshot.total}, bots=${results.length}`);
+};
+
+// ─── Cron: daily at 04:55 Tashkent (= 23:55 UTC) ────────────────────────────
 
 const scheduleDailyFetch = () => {
   const now = new Date();
-  // Next 23:55 UTC
   const next = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(),
+    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
     23, 55, 0, 0
   ));
   if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
 
   const msUntilFirst = next - now;
-  console.log(`[stats] Next fetch scheduled in ${Math.round(msUntilFirst / 60000)} min (${next.toISOString()})`);
+  console.log(`[stats] Next fetch in ${Math.round(msUntilFirst / 60000)} min (${next.toISOString()})`);
 
   setTimeout(() => {
     fetchAndStoreStats();
-    // Then repeat every 24 hours
     setInterval(fetchAndStoreStats, 24 * 60 * 60 * 1000);
   }, msUntilFirst);
 };
 
 scheduleDailyFetch();
 
-// ─── Statistics API handlers ──────────────────────────────────────────────────
+// ─── Statistics API endpoints ─────────────────────────────────────────────────
 
 const handleStatisticsLatest = (res) => {
   const snapshots = loadSnapshots();
@@ -118,9 +183,8 @@ const handleStatisticsLatest = (res) => {
     res.end(JSON.stringify({ error: 'No data yet' }));
     return;
   }
-  const latest = snapshots[snapshots.length - 1];
   res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-  res.end(JSON.stringify(latest));
+  res.end(JSON.stringify(snapshots[snapshots.length - 1]));
 };
 
 const handleStatisticsHistory = (reqUrl, res) => {
@@ -135,14 +199,11 @@ const handleStatisticsHistory = (reqUrl, res) => {
     snapshots = snapshots.filter((s) => s.date >= from && s.date <= to);
   } else if (period) {
     const now = new Date();
-    let cutoff;
-    if (period === '7d') cutoff = new Date(now - 7 * 86400000);
-    else if (period === '30d') cutoff = new Date(now - 30 * 86400000);
-    else if (period === '3m') cutoff = new Date(now - 90 * 86400000);
-    else if (period === '1y') cutoff = new Date(now - 365 * 86400000);
-    if (cutoff) {
-      const cutoffStr = cutoff.toISOString().slice(0, 10);
-      snapshots = snapshots.filter((s) => s.date >= cutoffStr);
+    const msMap = { '7d': 7, '30d': 30, '3m': 90, '1y': 365 };
+    const days = msMap[period];
+    if (days) {
+      const cutoff = new Date(now - days * 86400000).toISOString().slice(0, 10);
+      snapshots = snapshots.filter((s) => s.date >= cutoff);
     }
   }
 
@@ -155,18 +216,18 @@ const handleStatisticsHistory = (reqUrl, res) => {
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
+  '.js':   'text/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.svg':  'image/svg+xml',
   '.json': 'application/json; charset=utf-8',
-  '.ico': 'image/x-icon',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
+  '.ico':  'image/x-icon',
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.webp': 'image/webp',
-  '.woff2': 'font/woff2',
+  '.woff2':'font/woff2',
   '.woff': 'font/woff',
-  '.ttf': 'font/ttf',
+  '.ttf':  'font/ttf',
 };
 
 const sendFile = (filePath, res) => {
@@ -177,8 +238,7 @@ const sendFile = (filePath, res) => {
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': contentType });
+    res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
     res.end(data);
   });
 };
@@ -195,10 +255,7 @@ const serveStatic = (req, res) => {
   }
 
   fs.stat(filePath, (err, stat) => {
-    if (!err && stat.isFile()) {
-      sendFile(filePath, res);
-      return;
-    }
+    if (!err && stat.isFile()) { sendFile(filePath, res); return; }
     sendFile(path.join(distDir, 'index.html'), res);
   });
 };
@@ -209,18 +266,14 @@ const proxyRequest = (req, res) => {
   const target = new URL(backendUrl);
   const isHttps = target.protocol === 'https:';
   const requestFn = isHttps ? https.request : http.request;
-  const forwardPath = req.url || '/';
 
   const options = {
     protocol: target.protocol,
     hostname: target.hostname,
     port: target.port || (isHttps ? 443 : 80),
     method: req.method,
-    path: forwardPath,
-    headers: {
-      ...req.headers,
-      host: target.host,
-    },
+    path: req.url || '/',
+    headers: { ...req.headers, host: target.host },
   };
 
   const proxyReq = requestFn(options, (proxyRes) => {
@@ -242,7 +295,6 @@ const proxyRequest = (req, res) => {
 const server = http.createServer((req, res) => {
   const url = req.url || '/';
 
-  // Statistics routes (handled directly, not proxied)
   if (url === '/api/statistics/latest/' || url === '/api/statistics/latest') {
     handleStatisticsLatest(res);
     return;
@@ -252,7 +304,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Everything else under /api → proxy to backend
   if (url.startsWith('/api')) {
     proxyRequest(req, res);
     return;
@@ -264,5 +315,4 @@ const server = http.createServer((req, res) => {
 server.listen(port, () => {
   console.log(`Admin frontend listening on :${port}`);
   console.log(`Proxying /api -> ${backendUrl}`);
-  console.log(`Stats source: ${statsSourceUrl || '(not set — add STATS_SOURCE_URL to env)'}`);
 });
