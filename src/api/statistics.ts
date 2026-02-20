@@ -1,12 +1,18 @@
 import { apiClient } from './client';
 
-// Structure returned by the Telegram bot stats API (stored daily at ~04:58 Tashkent time)
 export interface LanguageBreakdown {
   count: number;
   ru: number;
   en: number;
   uz__lotin: number;
   uz__kiril: number;
+}
+
+export interface BotSnapshot {
+  id: string | number;
+  title: string;
+  port: number;
+  stats: DailyStatsSnapshot;
 }
 
 export interface DailyStatsSnapshot {
@@ -22,8 +28,8 @@ export interface DailyStatsSnapshot {
   blocked_users: number;
   downloads: number;
   timestamp: number;
-  // added by backend when storing
   date?: string;
+  bots?: BotSnapshot[];
 }
 
 export interface GrowthChartPoint {
@@ -38,8 +44,38 @@ export interface GrowthChartPoint {
 
 export type GrowthPeriod = '7d' | '30d' | '3m' | '1y' | 'custom';
 
+const snapshotToPoint = (s: DailyStatsSnapshot, botPort?: number): GrowthChartPoint => {
+  const label = s.date
+    ? s.date.slice(5).replace('-', '.')  // "02.20"
+    : new Date(s.timestamp * 1000).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+
+  if (botPort && s.bots) {
+    const bot = s.bots.find((b) => b.port === botPort);
+    if (bot) {
+      return {
+        date: label,
+        total: bot.stats.total,
+        newUsers: bot.stats.new_users,
+        newGroups: bot.stats.new_groups,
+        premiumUsers: bot.stats.premium_users,
+        blockedUsers: bot.stats.blocked_users,
+        downloads: bot.stats.downloads,
+      };
+    }
+  }
+
+  return {
+    date: label,
+    total: s.total,
+    newUsers: s.new_users,
+    newGroups: s.new_groups,
+    premiumUsers: s.premium_users,
+    blockedUsers: s.blocked_users,
+    downloads: s.downloads,
+  };
+};
+
 export const statisticsApi = {
-  // Fetch today's (latest) snapshot
   getLatestSnapshot: async (): Promise<DailyStatsSnapshot | null> => {
     try {
       const response = await apiClient.get<DailyStatsSnapshot>('/statistics/latest/');
@@ -49,14 +85,13 @@ export const statisticsApi = {
     }
   },
 
-  // Fetch historical snapshots for chart (stored daily by cron at 04:55 Tashkent)
   getHistory: async (
     period: GrowthPeriod,
     customFrom?: string,
-    customTo?: string
+    customTo?: string,
+    botPort?: number
   ): Promise<GrowthChartPoint[]> => {
     const params: Record<string, string> = {};
-
     if (period === 'custom' && customFrom && customTo) {
       params.from = customFrom;
       params.to = customTo;
@@ -67,15 +102,7 @@ export const statisticsApi = {
     try {
       const response = await apiClient.get<DailyStatsSnapshot[]>('/statistics/history/', { params });
       const snapshots = Array.isArray(response.data) ? response.data : [];
-      return snapshots.map((s) => ({
-        date: s.date ?? new Date(s.timestamp * 1000).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }),
-        total: s.total,
-        newUsers: s.new_users,
-        newGroups: s.new_groups,
-        premiumUsers: s.premium_users,
-        blockedUsers: s.blocked_users,
-        downloads: s.downloads,
-      }));
+      return snapshots.map((s) => snapshotToPoint(s, botPort));
     } catch {
       return [];
     }
