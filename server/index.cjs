@@ -346,6 +346,12 @@ const server = http.createServer((req, res) => {
     handleStatisticsLatest(res);
     return;
   }
+  if (url === '/api/statistics/trigger/' || url === '/api/statistics/trigger') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ ok: true, message: 'Collection started' }));
+    fetchAndStoreStats();
+    return;
+  }
   if (url.startsWith('/api/statistics/history')) {
     handleStatisticsHistory(url, res);
     return;
