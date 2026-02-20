@@ -105,6 +105,11 @@ const StatisticsPage: React.FC = () => {
   const totalNewGroupsInPeriod = history.reduce((s, d) => s + d.newGroups, 0);
 
   const fmt = (n: number) => n.toLocaleString('ru-RU');
+  const fmtAxis = (n: number) => {
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace('.0', '') + 'M';
+    if (n >= 1_000)     return (n / 1_000).toFixed(0) + 'K';
+    return String(n);
+  };
 
   return (
     <div className="space-y-6">
@@ -250,6 +255,11 @@ const StatisticsPage: React.FC = () => {
             <div className="flex items-center justify-center h-64 text-muted-foreground">
               Нет данных за выбранный период
             </div>
+          ) : history.length === 1 ? (
+            <div className="flex flex-col items-center justify-center h-64 gap-2 text-center">
+              <p className="text-muted-foreground">Сегодня собран первый снапшот — <span className="font-semibold text-foreground">{fmt(history[0].total)}</span> пользователей</p>
+              <p className="text-sm text-muted-foreground">График роста появится завтра, когда накопится хотя бы 2 дня данных</p>
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <AreaChart data={history} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -265,7 +275,7 @@ const StatisticsPage: React.FC = () => {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} tickFormatter={fmt} />
+                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickLine={false} axisLine={false} width={55} tickFormatter={fmtAxis} />
                 <Tooltip
                   contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: 13 }}
                   formatter={(value: number, name: string) => [fmt(value), name === 'total' ? 'Всего' : 'Новых']}
