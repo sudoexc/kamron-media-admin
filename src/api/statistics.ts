@@ -44,24 +44,23 @@ export interface GrowthChartPoint {
 
 export type GrowthPeriod = '7d' | '30d' | '3m' | '1y' | 'custom';
 
-const snapshotToPoint = (s: DailyStatsSnapshot, botPort?: number): GrowthChartPoint => {
+const snapshotToPoint = (s: DailyStatsSnapshot, botPort?: number): GrowthChartPoint | null => {
   const label = s.date
-    ? s.date.slice(5).replace('-', '.')  // "02.20"
+    ? s.date.slice(5).replace('-', '.')
     : new Date(s.timestamp * 1000).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 
-  if (botPort && s.bots) {
-    const bot = s.bots.find((b) => b.port === botPort);
-    if (bot) {
-      return {
-        date: label,
-        total: bot.stats.total,
-        newUsers: bot.stats.new_users,
-        newGroups: bot.stats.new_groups,
-        premiumUsers: bot.stats.premium_users,
-        blockedUsers: bot.stats.blocked_users,
-        downloads: bot.stats.downloads,
-      };
-    }
+  if (botPort) {
+    const bot = s.bots?.find((b) => b.port === botPort);
+    if (!bot) return null; // skip — this bot didn't exist on this date
+    return {
+      date: label,
+      total: bot.stats.total,
+      newUsers: bot.stats.new_users,
+      newGroups: bot.stats.new_groups,
+      premiumUsers: bot.stats.premium_users,
+      blockedUsers: bot.stats.blocked_users,
+      downloads: bot.stats.downloads,
+    };
   }
 
   return {
@@ -102,7 +101,9 @@ export const statisticsApi = {
     try {
       const response = await apiClient.get<DailyStatsSnapshot[]>('/statistics/history/', { params });
       const snapshots = Array.isArray(response.data) ? response.data : [];
-      return snapshots.map((s) => snapshotToPoint(s, botPort));
+      return snapshots
+        .map((s) => snapshotToPoint(s, botPort))
+        .filter((p): p is GrowthChartPoint => p !== null);
     } catch {
       return [];
     }
