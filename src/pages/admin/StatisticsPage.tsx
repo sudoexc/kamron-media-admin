@@ -42,16 +42,19 @@ const StatisticsPage: React.FC = () => {
   const [latest, setLatest] = useState<DailyStatsSnapshot | null>(null);
   const [selectedBotPort, setSelectedBotPort] = useState<number | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
+  const [allTimeHistory, setAllTimeHistory] = useState<GrowthChartPoint[]>([]);
 
   const fetchAll = useCallback(async (p: GrowthPeriod, from?: string, to?: string, botPort?: number) => {
     setIsLoading(true);
     try {
-      const [histData, latestData] = await Promise.all([
+      const [histData, latestData, allTimeData] = await Promise.all([
         statisticsApi.getHistory(p, from, to, botPort),
         statisticsApi.getLatestSnapshot(),
+        statisticsApi.getHistory('1y', undefined, undefined, botPort),
       ]);
       setHistory(histData);
       setLatest(latestData);
+      setAllTimeHistory(allTimeData);
     } catch {
       toast({ title: 'Ошибка', description: 'Не удалось загрузить статистику', variant: 'destructive' });
     } finally {
@@ -101,8 +104,8 @@ const StatisticsPage: React.FC = () => {
       }))
     : [];
 
-  const totalNewInPeriod      = history.reduce((s, d) => s + d.newUsers,  0);
-  const totalNewGroupsInPeriod = history.reduce((s, d) => s + d.newGroups, 0);
+  const totalNewAllTime      = allTimeHistory.reduce((s, d) => s + d.newUsers,  0);
+  const totalNewGroupsAllTime = allTimeHistory.reduce((s, d) => s + d.newGroups, 0);
 
   const fmt = (n: number) => n.toLocaleString('ru-RU');
   const fmtAxis = (n: number) => {
@@ -223,10 +226,10 @@ const StatisticsPage: React.FC = () => {
 
           <div className="ml-auto flex items-center gap-3">
             <span className="text-sm text-muted-foreground hidden sm:block">
-              За период:{' '}
-              <span className="font-semibold text-foreground">+{fmt(totalNewInPeriod)} польз.</span>
+              За всё время:{' '}
+              <span className="font-semibold text-foreground">+{fmt(totalNewAllTime)} польз.</span>
               {' / '}
-              <span className="font-semibold text-foreground">+{fmt(totalNewGroupsInPeriod)} групп</span>
+              <span className="font-semibold text-foreground">+{fmt(totalNewGroupsAllTime)} групп</span>
             </span>
             <Button variant="ghost" size="icon" onClick={handleRefresh} disabled={isLoading}>
               <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
