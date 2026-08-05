@@ -167,6 +167,11 @@ const BotsPage: React.FC = () => {
       cell: (bot: Bot) => bot.request_port,
     },
     {
+      key: 'order',
+      header: 'Порядок',
+      cell: (bot: Bot) => bot.order ?? '—',
+    },
+    {
       key: 'created_at',
       header: 'Создан',
       cell: (bot: Bot) =>
