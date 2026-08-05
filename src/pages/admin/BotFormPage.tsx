@@ -177,6 +177,7 @@ const botSchema = z.object({
   notification_group_id: optionalNumberFromInput(),
   bot_token: optionalStringFromInput(),
   request_port: optionalNumberFromInput(),
+  order: optionalNumberFromInput(),
 });
 
 type BotFormData = z.infer<typeof botSchema>;
@@ -263,6 +264,7 @@ const BotFormPage: React.FC = () => {
               setValue('notification_group_id', bot.notification_group_id ?? undefined);
               setValue('bot_token', bot.bot_token);
               setValue('request_port', bot.request_port ?? undefined);
+              setValue('order', bot.order ?? undefined);
 
               const planIdsFromBot = extractPlanIds(
                 (bot as Record<string, unknown>).plans ??
@@ -335,6 +337,9 @@ const BotFormPage: React.FC = () => {
       }
       if (typeof data.request_port === 'number') {
         payload.request_port = data.request_port;
+      }
+      if (typeof data.order === 'number') {
+        payload.order = data.order;
       }
       const uniquePlanIds = Array.from(new Set(selectedPlanIds)).filter(
         (planId) => Number.isFinite(planId) && planId > 0
@@ -512,6 +517,22 @@ const BotFormPage: React.FC = () => {
               {errors.request_port && (
                 <p className="text-sm text-destructive">
                   {errors.request_port.message as string}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="order">Порядок</Label>
+              <Input
+                id="order"
+                type="number"
+                placeholder="0"
+                {...register('order')}
+                disabled={isLoading}
+              />
+              {errors.order && (
+                <p className="text-sm text-destructive">
+                  {errors.order.message as string}
                 </p>
               )}
             </div>

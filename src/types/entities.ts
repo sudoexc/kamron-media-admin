@@ -7,6 +7,7 @@ export interface Bot {
   notification_group_id: number;
   bot_token: string;
   request_port: number | null;
+  order?: number | null;
   created_at?: string;
 }
 
