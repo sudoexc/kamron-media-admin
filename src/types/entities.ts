@@ -91,6 +91,7 @@ export interface PaymentMethod {
   callback_data?: string;
   is_active?: boolean;
   isActive?: boolean;
+  order?: number | null;
   created_at?: string;
   createdAt?: string;
 }

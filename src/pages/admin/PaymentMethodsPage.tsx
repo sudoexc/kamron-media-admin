@@ -234,6 +234,11 @@ const PaymentMethodsPage: React.FC = () => {
       },
     },
     {
+      key: 'order',
+      header: 'Порядок',
+      cell: (method: NormalizedMethod) => method.order ?? '—',
+    },
+    {
       key: 'createdAt',
       header: 'Создан',
       cell: (method: NormalizedMethod) =>

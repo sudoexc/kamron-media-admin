@@ -14,10 +14,21 @@ import { PaymentMethod } from '@/types/entities';
 import { useToast } from '@/hooks/use-toast';
 import { logRecentAction } from '@/lib/recent-actions';
 
+const optionalNumberFromInput = () =>
+  z.preprocess(
+    (val) => {
+      if (val === '' || val === null || typeof val === 'undefined') return undefined;
+      if (typeof val === 'string' && val.trim() === '') return undefined;
+      return Number(val);
+    },
+    z.number().int('Только целое число').optional()
+  );
+
 const methodSchema = z.object({
   name: z.string().min(1, 'Введите название').max(100),
   callback_data: z.string().min(1, 'Введите callback_data').max(200),
   is_active: z.boolean(),
+  order: optionalNumberFromInput(),
 });
 
 type MethodFormData = z.infer<typeof methodSchema>;
@@ -61,6 +72,7 @@ const PaymentMethodFormPage: React.FC = () => {
           setValue('name', label);
           setValue('callback_data', method.callback_data || '');
           setValue('is_active', method.is_active ?? method.isActive ?? true);
+          setValue('order', method.order ?? undefined);
         }
       } catch (error) {
         toast({
@@ -87,6 +99,9 @@ const PaymentMethodFormPage: React.FC = () => {
         callback_data: callbackData,
         is_active: data.is_active,
       };
+      if (typeof data.order === 'number') {
+        payload.order = data.order;
+      }
 
       if (isEdit) {
         const updated = await paymentMethodsApi.update(id!, payload);
@@ -179,6 +194,22 @@ const PaymentMethodFormPage: React.FC = () => {
               {errors.callback_data && (
                 <p className="text-sm text-destructive">
                   {errors.callback_data.message}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="order">Порядок</Label>
+              <Input
+                id="order"
+                type="number"
+                placeholder="0"
+                {...register('order')}
+                disabled={isLoading}
+              />
+              {errors.order && (
+                <p className="text-sm text-destructive">
+                  {errors.order.message as string}
                 </p>
               )}
             </div>
