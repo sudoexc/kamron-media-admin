@@ -355,24 +355,17 @@ export const subscriptionsApi = {
 };
 
 export const usersApi = {
-  getAll: () => getCached('users:list', () => apiClient.get<User[]>('/users/').then((r) => r.data)),
+  getAll: (params?: { page?: number; limit?: number; search?: string }) =>
+    apiClient
+      .get<User[] | PaginatedResponse<User>>('/users/', { params })
+      .then((r) => normalizePaginatedResponse<User>(r.data)),
   getById: (telegramId: string | number) =>
     apiClient.get<User>(`/users/${telegramId}/`).then((r) => r.data),
-  create: (data: User) =>
-    apiClient.post<User>('/users/', data).then((r) => {
-      invalidateCache('users:');
-      return r.data;
-    }),
+  create: (data: User) => apiClient.post<User>('/users/', data).then((r) => r.data),
   update: (telegramId: string | number, data: Partial<User>) =>
-    apiClient.patch<User>(`/users/${telegramId}/`, data).then((r) => {
-      invalidateCache('users:');
-      return r.data;
-    }),
+    apiClient.patch<User>(`/users/${telegramId}/`, data).then((r) => r.data),
   delete: (telegramId: string | number) =>
-    apiClient.delete(`/users/${telegramId}/`).then(() => {
-      invalidateCache('users:');
-      return undefined;
-    }),
+    apiClient.delete(`/users/${telegramId}/`).then(() => undefined),
 };
 
 export const messagesApi = {

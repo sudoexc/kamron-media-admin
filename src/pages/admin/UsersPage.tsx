@@ -29,6 +29,8 @@ const UsersPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -39,21 +41,10 @@ const UsersPage: React.FC = () => {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await usersApi.getAll();
-      const sorted = [...response].sort((a, b) => {
-        const aTime = a.created_at ? Date.parse(a.created_at) : NaN;
-        const bTime = b.created_at ? Date.parse(b.created_at) : NaN;
-        if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) {
-          return bTime - aTime;
-        }
-        const aId = Number(a.telegram_id);
-        const bId = Number(b.telegram_id);
-        if (!Number.isNaN(aId) && !Number.isNaN(bId) && aId !== bId) {
-          return bId - aId;
-        }
-        return String(b.telegram_id).localeCompare(String(a.telegram_id));
-      });
-      setData(sorted);
+      const response = await usersApi.getAll({ page, limit, search });
+      setData(response.data);
+      setTotal(response.total);
+      setTotalPages(response.totalPages);
     } catch (error) {
       toast({
         title: 'Ошибка',
@@ -63,7 +54,7 @@ const UsersPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [page, search, toast]);
 
   useEffect(() => {
     fetchData();
@@ -136,25 +127,6 @@ const UsersPage: React.FC = () => {
     }
   };
 
-  const filtered = data.filter((user) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      String(user.telegram_id).includes(q) ||
-      user.language.toLowerCase().includes(q)
-    );
-  });
-
-  const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const paginated = filtered.slice((page - 1) * limit, page * limit);
-
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(1);
-    }
-  }, [page, totalPages]);
-
   const columns = [
     {
       key: 'telegram_id',
@@ -225,14 +197,14 @@ const UsersPage: React.FC = () => {
                 setSearch(value);
                 setPage(1);
               }}
-              placeholder="Поиск по Telegram ID или языку..."
+              placeholder="Поиск по Telegram ID..."
               showFilterButton={false}
             />
           </div>
 
           <DataTable
             columns={columns}
-            data={paginated}
+            data={data}
             isLoading={isLoading}
             onRowClick={(user) => navigate(`/admin/users/${user.telegram_id}/edit`)}
             selectable

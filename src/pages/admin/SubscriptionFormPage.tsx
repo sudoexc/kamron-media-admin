@@ -15,6 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { subscriptionsApi, usersApi, botsApi, plansApi } from '@/api/entities';
 import { apiClient } from '@/api/client';
@@ -27,9 +35,9 @@ const subscriptionSchema = z.object({
   user: z.preprocess(
     (val) => Number(val),
     z
-      .number({ required_error: 'Выберите пользователя' })
+      .number({ required_error: 'Введите Telegram ID пользователя' })
       .int('Только целое число')
-      .min(1, 'Выберите пользователя')
+      .min(1, 'Введите Telegram ID пользователя')
   ),
   bot: z.preprocess(
     (val) => Number(val),
@@ -56,8 +64,6 @@ const SubscriptionFormPage: React.FC = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
-  const [users, setUsers] = useState<User[]>([]);
-  const [userSearch, setUserSearch] = useState('');
   const [bots, setBots] = useState<Bot[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const isEdit = !!id;
@@ -87,6 +93,7 @@ const SubscriptionFormPage: React.FC = () => {
     start: null,
     end: null,
   });
+  const [userNotFoundId, setUserNotFoundId] = useState<number | null>(null);
 
   const getRefId = (value: SubscriptionRef): number | null => {
     if (typeof value === 'number') return value;
@@ -95,73 +102,6 @@ const SubscriptionFormPage: React.FC = () => {
     if (typeof value.id === 'number') return value.id;
     return null;
   };
-
-  const getUserLanguage = (userId: number) => {
-    const user = users.find(
-      (item) =>
-        Number(item.telegram_id) === userId ||
-        (typeof item.id === 'number' && Number(item.id) === userId)
-    );
-    return user?.language || 'ru';
-  };
-
-  const userOptions = useMemo(
-    () =>
-      users.map((user) => ({
-        id: Number(user.telegram_id),
-        label: `${user.telegram_id ?? user.id} (${user.language})`,
-      })),
-    [users]
-  );
-
-  const selectedUserOption = useMemo(() => {
-    if (!selectedUser) return null;
-    const exists = userOptions.some((option) => option.id === selectedUser);
-    if (exists) return null;
-    return { id: selectedUser, label: `${selectedUser} (ru)` };
-  }, [selectedUser, userOptions]);
-
-  const filteredUserOptions = useMemo(() => {
-    if (!userSearch) return userOptions;
-    return userOptions.filter((option) =>
-      String(option.id).includes(userSearch)
-    );
-  }, [userOptions, userSearch]);
-
-  const manualUserOption = useMemo(() => {
-    if (!userSearch) return null;
-    const id = Number(userSearch);
-    if (!Number.isFinite(id) || id <= 0) return null;
-    const exists = userOptions.some((option) => option.id === id);
-    if (exists) return null;
-    return { id, label: `Новый: ${id} (ru)` };
-  }, [userSearch, userOptions]);
-
-  const combinedUserOptions = useMemo(() => {
-    const options: Array<{ id: number; label: string }> = [];
-    if (manualUserOption) options.push(manualUserOption);
-    if (
-      selectedUserOption &&
-      (!manualUserOption || manualUserOption.id !== selectedUserOption.id)
-    ) {
-      options.push(selectedUserOption);
-    }
-    const baseOptions = userSearch ? filteredUserOptions : userOptions;
-    const seen = new Set(options.map((option) => option.id));
-    baseOptions.forEach((option) => {
-      if (!seen.has(option.id)) {
-        options.push(option);
-        seen.add(option.id);
-      }
-    });
-    return options;
-  }, [
-    manualUserOption,
-    selectedUserOption,
-    userSearch,
-    filteredUserOptions,
-    userOptions,
-  ]);
 
   const botOptions = useMemo(
     () =>
@@ -199,16 +139,13 @@ const SubscriptionFormPage: React.FC = () => {
   useEffect(() => {
     const loadOptions = async () => {
       try {
-        const [usersResponse, botsResponse, plansResponse] = await Promise.all([
-          usersApi.getAll(),
+        const [botsResponse, plansResponse] = await Promise.all([
           botsApi.getAll(),
           plansApi.getAll(),
         ]);
-        setUsers(usersResponse);
         setBots(botsResponse);
         setPlans(plansResponse);
       } catch {
-        setUsers([]);
         setBots([]);
         setPlans([]);
       }
@@ -266,23 +203,24 @@ const SubscriptionFormPage: React.FC = () => {
       date.getHours()
     )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 
-  const ensureUserExists = async (userId: number) => {
-    const exists = users.some(
-      (user) => Number(user.telegram_id) === userId || Number(user.id) === userId
-    );
-    if (exists) return;
-    const created = await usersApi.create({
-      telegram_id: userId,
-      language: 'ru',
-      is_active: true,
-    });
-    setUsers((prev) => [created, ...prev]);
-  };
-
   const onSubmit = async (data: SubscriptionFormData) => {
     setIsLoading(true);
     try {
-      await ensureUserExists(data.user);
+      let targetUser: User | null = null;
+      try {
+        targetUser = await usersApi.getById(data.user);
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status !== 404) {
+          throw error;
+        }
+        targetUser = null;
+      }
+
+      if (!targetUser) {
+        setUserNotFoundId(data.user);
+        return;
+      }
+
       const currentTime = getCurrentTimeString();
       const today = new Date();
       const todayDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(
@@ -347,7 +285,7 @@ const SubscriptionFormPage: React.FC = () => {
             user_id: data.user,
             bot_id: data.bot,
             plan_id: data.plan,
-            language: getUserLanguage(data.user),
+            language: targetUser.language || 'ru',
             message_identifier: 'subscription_purchased',
           });
         } catch (error) {
@@ -434,53 +372,21 @@ const SubscriptionFormPage: React.FC = () => {
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="user">User</Label>
-              <Select
+              <Label htmlFor="user">Telegram ID пользователя</Label>
+              <Input
+                id="user"
+                type="text"
+                inputMode="numeric"
+                placeholder="Введите Telegram ID пользователя"
                 value={selectedUser ? String(selectedUser) : ''}
-                onValueChange={(value) => {
-                  setValue('user', Number(value));
-                  setUserSearch('');
+                onChange={(event) => {
+                  const onlyDigits = event.target.value.replace(/\D/g, '');
+                  setValue('user', onlyDigits ? Number(onlyDigits) : 0, {
+                    shouldValidate: true,
+                  });
                 }}
                 disabled={isLoading}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите пользователя" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover">
-                  <div className="p-2 pb-1">
-                    <Input
-                      value={userSearch}
-                      onChange={(event) => {
-                        const onlyDigits = event.target.value.replace(/\D/g, '');
-                        setUserSearch(onlyDigits);
-                      }}
-                      placeholder="Введите Telegram ID"
-                      inputMode="numeric"
-                      className="h-8"
-                      onKeyDown={(event) => {
-                        event.stopPropagation();
-                        if (event.key === 'Enter' && manualUserOption) {
-                          event.preventDefault();
-                          setValue('user', manualUserOption.id, { shouldValidate: true });
-                          setUserSearch('');
-                        }
-                      }}
-                      onPointerDown={(event) => event.stopPropagation()}
-                    />
-                  </div>
-                  {combinedUserOptions.length > 0 ? (
-                    combinedUserOptions.map((option) => (
-                      <SelectItem key={option.id} value={String(option.id)}>
-                        {option.label}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">
-                      Ничего не найдено
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
+              />
               {errors.user && (
                 <p className="text-sm text-destructive">{errors.user.message as string}</p>
               )}
@@ -564,6 +470,23 @@ const SubscriptionFormPage: React.FC = () => {
           </form>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={userNotFoundId !== null}
+        onOpenChange={(open) => !open && setUserNotFoundId(null)}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Пользователь не найден</DialogTitle>
+            <DialogDescription>
+              Пользователь с Telegram ID {userNotFoundId} не существует. Проверьте ID и попробуйте снова.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setUserNotFoundId(null)}>Понятно</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

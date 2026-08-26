@@ -9,9 +9,9 @@ import { DataTablePagination } from '@/components/table/DataTablePagination';
 import { DataTableActions } from '@/components/table/DataTableActions';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { subscriptionsApi, botsApi, plansApi, usersApi } from '@/api/entities';
+import { subscriptionsApi, botsApi, plansApi } from '@/api/entities';
 import { apiClient } from '@/api/client';
-import { Subscription, Bot, SubscriptionPlan, User, SubscriptionRef } from '@/types/entities';
+import { Subscription, Bot, SubscriptionPlan, SubscriptionRef } from '@/types/entities';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -24,7 +24,6 @@ const SubscriptionsPage: React.FC = () => {
   const [data, setData] = useState<Subscription[]>([]);
   const [bots, setBots] = useState<Bot[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -45,13 +44,11 @@ const SubscriptionsPage: React.FC = () => {
         return payload?.results ?? [];
       };
 
-      const [subsResponse, botsResponse, plansResponse, usersResponse] =
-        await Promise.all([
-          subscriptionsApi.getAll(),
-          botsApi.getAll(),
-          plansApi.getAll(),
-          usersApi.getAll(),
-        ]);
+      const [subsResponse, botsResponse, plansResponse] = await Promise.all([
+        subscriptionsApi.getAll(),
+        botsApi.getAll(),
+        plansApi.getAll(),
+      ]);
       const subsList = normalizeList(subsResponse as unknown);
       const sortedSubs = [...subsList].sort((a, b) => {
         const aTime = a.created_at ? Date.parse(a.created_at) : Date.parse(a.start_date);
@@ -69,7 +66,6 @@ const SubscriptionsPage: React.FC = () => {
       setData(sortedSubs);
       setBots(normalizeList(botsResponse as unknown));
       setPlans(normalizeList(plansResponse as unknown));
-      setUsers(normalizeList(usersResponse as unknown));
     } catch (error) {
       toast({
         title: 'Ошибка',
@@ -105,7 +101,7 @@ const SubscriptionsPage: React.FC = () => {
               user_id: userId,
               bot_id: botId,
               plan_id: planId,
-              language: getUserLanguage(userId),
+              language: getUserLanguage(target.user),
               message_identifier: 'subscription_expired',
             });
           } catch (error) {
@@ -177,7 +173,7 @@ const SubscriptionsPage: React.FC = () => {
             user_id: userId,
             bot_id: botId,
             plan_id: planId,
-            language: getUserLanguage(userId),
+            language: getUserLanguage(target.sub.user),
             message_identifier: 'subscription_expired',
           });
         })
@@ -238,14 +234,11 @@ const SubscriptionsPage: React.FC = () => {
     return null;
   };
 
-  const getUserLanguage = (userId: number | null) => {
-    if (!userId) return 'ru';
-    const user = users.find(
-      (item) =>
-        Number(item.telegram_id) === userId ||
-        (typeof item.id === 'number' && Number(item.id) === userId)
-    );
-    return user?.language || 'ru';
+  const getUserLanguage = (userRef: SubscriptionRef): string => {
+    if (userRef && typeof userRef === 'object' && userRef.language) {
+      return userRef.language;
+    }
+    return 'ru';
   };
 
   const getRefLabel = (value: SubscriptionRef): string => {
@@ -272,20 +265,6 @@ const SubscriptionsPage: React.FC = () => {
     plans.forEach((plan) => map.set(Number(plan.id), plan.name));
     return map;
   }, [plans]);
-
-  const usersMap = useMemo(() => {
-    const map = new Map<number, string>();
-    users.forEach((user) => {
-      const label = String(user.telegram_id ?? user.id ?? '');
-      if (user.id) {
-        map.set(Number(user.id), label);
-      }
-      if (user.telegram_id) {
-        map.set(Number(user.telegram_id), label);
-      }
-    });
-    return map;
-  }, [users]);
 
   const filtered = data.filter((sub) => {
     if (!search) return true;
@@ -319,12 +298,7 @@ const SubscriptionsPage: React.FC = () => {
       key: 'user',
       header: 'USER',
       cell: (sub: Subscription) => (
-        <p className="font-medium">
-          {(() => {
-            const id = getRefId(sub.user);
-            return (id ? usersMap.get(id) : null) || getRefLabel(sub.user);
-          })()}
-        </p>
+        <p className="font-medium">{getRefLabel(sub.user)}</p>
       ),
     },
     {

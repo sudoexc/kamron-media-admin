@@ -52,6 +52,7 @@ export type SubscriptionRef =
       title?: string;
       name?: string;
       username?: string;
+      language?: string;
     };
 
 export interface Subscription {
