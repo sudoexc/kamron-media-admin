@@ -4,7 +4,6 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { DataTable } from '@/components/table/DataTable';
-import { DataTableSearch } from '@/components/table/DataTableSearch';
 import { DataTablePagination } from '@/components/table/DataTablePagination';
 import { DataTableActions } from '@/components/table/DataTableActions';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -25,8 +24,9 @@ const SubscriptionsPage: React.FC = () => {
   const [bots, setBots] = useState<Bot[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -45,25 +45,13 @@ const SubscriptionsPage: React.FC = () => {
       };
 
       const [subsResponse, botsResponse, plansResponse] = await Promise.all([
-        subscriptionsApi.getAll(),
+        subscriptionsApi.getAll({ page, limit }),
         botsApi.getAll(),
         plansApi.getAll(),
       ]);
-      const subsList = normalizeList(subsResponse as unknown);
-      const sortedSubs = [...subsList].sort((a, b) => {
-        const aTime = a.created_at ? Date.parse(a.created_at) : Date.parse(a.start_date);
-        const bTime = b.created_at ? Date.parse(b.created_at) : Date.parse(b.start_date);
-        if (!Number.isNaN(aTime) && !Number.isNaN(bTime) && aTime !== bTime) {
-          return bTime - aTime;
-        }
-        const aId = Number(a.id);
-        const bId = Number(b.id);
-        if (!Number.isNaN(aId) && !Number.isNaN(bId) && aId !== bId) {
-          return bId - aId;
-        }
-        return String(b.id).localeCompare(String(a.id));
-      });
-      setData(sortedSubs);
+      setData(subsResponse.data);
+      setTotal(subsResponse.total);
+      setTotalPages(subsResponse.totalPages);
       setBots(normalizeList(botsResponse as unknown));
       setPlans(normalizeList(plansResponse as unknown));
     } catch (error) {
@@ -75,7 +63,7 @@ const SubscriptionsPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [page, toast]);
 
   useEffect(() => {
     fetchData();
@@ -266,26 +254,6 @@ const SubscriptionsPage: React.FC = () => {
     return map;
   }, [plans]);
 
-  const filtered = data.filter((sub) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      getRefLabel(sub.user).toLowerCase().includes(q) ||
-      getRefLabel(sub.bot).toLowerCase().includes(q) ||
-      getRefLabel(sub.plan).toLowerCase().includes(q)
-    );
-  });
-
-  const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
-  const paginated = filtered.slice((page - 1) * limit, page * limit);
-
-  useEffect(() => {
-    if (page > totalPages) {
-      setPage(1);
-    }
-  }, [page, totalPages]);
-
   const formatDateTime = (value?: string | null) => {
     if (!value) return '—';
     const date = new Date(value);
@@ -376,21 +344,9 @@ const SubscriptionsPage: React.FC = () => {
 
       <Card className="glass">
         <CardContent className="p-6">
-          <div className="mb-4">
-            <DataTableSearch
-              value={search}
-              onChange={(value) => {
-                setSearch(value);
-                setPage(1);
-              }}
-              placeholder="Поиск..."
-              showFilterButton={false}
-            />
-          </div>
-
           <DataTable
             columns={columns}
-            data={paginated}
+            data={data}
             isLoading={isLoading}
             onRowClick={(sub) => navigate(`/admin/subscriptions/${sub.id}/edit`)}
             selectable

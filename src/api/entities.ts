@@ -331,27 +331,18 @@ export const paymentsApi = {
 };
 
 export const subscriptionsApi = {
-  getAll: () =>
-    getCached('subscriptions:list', () =>
-      apiClient.get<Subscription[]>('/subscriptions/').then((r) => r.data)
-    ),
+  getAll: (params?: { page?: number; limit?: number }) =>
+    apiClient
+      .get<Subscription[] | PaginatedResponse<Subscription>>('/subscriptions/', { params })
+      .then((r) => normalizePaginatedResponse<Subscription>(r.data)),
   getById: (id: string | number) =>
     apiClient.get<Subscription>(`/subscriptions/${id}/`).then((r) => r.data),
   create: (data: Omit<Subscription, 'id' | 'created_at'>) =>
-    apiClient.post<Subscription>('/subscriptions/', data).then((r) => {
-      invalidateCache('subscriptions:');
-      return r.data;
-    }),
+    apiClient.post<Subscription>('/subscriptions/', data).then((r) => r.data),
   update: (id: string | number, data: Partial<Subscription>) =>
-    apiClient.patch<Subscription>(`/subscriptions/${id}/`, data).then((r) => {
-      invalidateCache('subscriptions:');
-      return r.data;
-    }),
+    apiClient.patch<Subscription>(`/subscriptions/${id}/`, data).then((r) => r.data),
   delete: (id: string | number) =>
-    apiClient.delete(`/subscriptions/${id}/`).then(() => {
-      invalidateCache('subscriptions:');
-      return undefined;
-    }),
+    apiClient.delete(`/subscriptions/${id}/`).then(() => undefined),
 };
 
 export const usersApi = {

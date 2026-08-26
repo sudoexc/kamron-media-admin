@@ -229,12 +229,12 @@ const PaymentFormPage: React.FC = () => {
           await Promise.all([
             usersApi.getAll({ page: 1, limit: 200 }),
             botsApi.getAll(),
-            subscriptionsApi.getAll(),
+            subscriptionsApi.getAll({ page: 1, limit: 200 }),
             paymentMethodsApi.getAll({ page: 1, limit: 200 }),
           ]);
         setUsers(usersResponse.data);
         setBots(botsResponse);
-        setSubscriptions(subscriptionsResponse);
+        setSubscriptions(subscriptionsResponse.data);
         setMethods(methodsResponse.data as Array<PaymentMethod | string>);
       } catch {
         setUsers([]);
